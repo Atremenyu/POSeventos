@@ -126,7 +126,7 @@ const POSView: React.FC<POSViewProps> = ({
             )}
           </div>
 
-          <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide touch-pan-x -mx-4 px-4 sm:mx-0 sm:px-0">
             {displayCategories.map(cat => (
               <button
                 key={cat}
@@ -143,7 +143,7 @@ const POSView: React.FC<POSViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-20 md:pb-0">
           {filteredProducts.map(product => (
             <button
               key={product.id}

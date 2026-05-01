@@ -245,8 +245,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex space-x-1 bg-slate-200 p-1 rounded-xl w-fit">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 overflow-hidden">
+      <div className="flex space-x-1 bg-slate-200 p-1 rounded-xl w-fit max-w-full overflow-x-auto scrollbar-hide">
         <button 
           onClick={() => setActiveTab('products')}
           className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'products' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
@@ -337,8 +337,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <table className="w-full text-left min-w-[500px] md:min-w-0">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Item</th>

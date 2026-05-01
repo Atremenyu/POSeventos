@@ -142,7 +142,7 @@ const TablesView: React.FC<TablesViewProps> = ({
                 </button>
               </div>
 
-              <div className="flex-grow overflow-y-auto p-8 space-y-6">
+              <div className="flex-grow overflow-y-auto p-4 sm:p-8 space-y-6">
                 {/* Items List */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Resumen de Cuenta</h4>

@@ -1,10 +1,7 @@
-
+import { jsPDF } from 'jspdf';
 import { Order } from '../types';
 
 export const generateTicketPDF = (order: Order, restaurantName: string = 'MI RESTAURANTE') => {
-  // Accessing jsPDF from global scope since it's loaded via CDN
-  const { jsPDF } = (window as any).jspdf;
-  
   // Calculate height needed: base + items + notes
   const noteLinesCount = order.items.filter(i => i.note).length;
   const dynamicHeight = 150 + (order.items.length * 7) + (noteLinesCount * 4);

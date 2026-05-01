@@ -20,32 +20,52 @@ const ActiveOrdersSlider: React.FC<ActiveOrdersSliderProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[50] flex justify-end overflow-hidden">
+        <div className="fixed inset-0 z-[80] flex justify-end overflow-hidden pointer-events-none">
+          {/* Transparent backdrop that handles clicks but allows the drawer to be below header visually */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto"
           />
+          
           <motion.div 
+            drag="x"
+            dragConstraints={{ left: 0, right: 450 }}
+            dragElastic={0.1}
+            onDragEnd={(_, info) => {
+              if (info.offset.x > 100 || info.velocity.x > 500) {
+                onClose();
+              }
+            }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="relative w-full md:w-[450px] bg-slate-50 shadow-2xl h-full flex flex-col"
+            className="relative w-full md:w-[450px] bg-white shadow-[-20px_0_50px_-10px_rgba(0,0,0,0.3)] h-[calc(100vh-64px)] mt-16 pointer-events-auto flex flex-col border-l border-slate-200"
           >
-            <div className="p-6 bg-black text-white flex justify-between items-center border-b border-red-600/30">
-              <div>
-                <h3 className="text-xl font-black uppercase tracking-tighter">Pedidos Activos</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Estatus y Entregas</p>
+            {/* Drag Handle Indicator */}
+            <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-slate-200 rounded-full md:flex hidden" />
+
+            <div className="p-6 bg-slate-50 flex justify-between items-center border-b border-slate-200">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-red-600 shadow-lg rotate-3">
+                  <Icons.History />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tighter text-black leading-none">Pedidos Activos</h3>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1.5">Desliza para cerrar</p>
+                </div>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full transition text-white">
-                <Icons.X />
-              </button>
+              <div className="flex items-center">
+                <span className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-full animate-pulse shadow-lg shadow-red-100">
+                  {orders.filter(o => !(o.isPaid && o.status === 'delivered') && o.status !== 'cancelled').length} EN VIVO
+                </span>
+              </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+            <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/50">
               {orders.filter(o => !(o.isPaid && o.status === 'delivered') && o.status !== 'cancelled').sort((a,b) => {
                 if (a.status === 'ready' && b.status !== 'ready') return -1;
                 if (a.status !== 'ready' && b.status === 'ready') return 1;

@@ -319,7 +319,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
-      <header className="bg-black text-white shadow-md flex-shrink-0 z-[60] relative no-print border-b border-red-600">
+      <header className="bg-black text-white shadow-md flex-shrink-0 z-[100] relative no-print border-b border-red-600">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <span className="text-red-600">
@@ -333,7 +333,10 @@ const App: React.FC = () => {
           
           <TabNavigation 
             activeView={view} 
-            onViewChange={setView} 
+            onViewChange={(newView) => {
+              setView(newView);
+              setShowOrdersSlider(false);
+            }} 
             pendingCount={pendingCount} 
             activeOrdersCount={orders.filter(o => !(o.isPaid && o.status === 'delivered') && o.status !== 'cancelled').length}
             onToggleOrders={() => setShowOrdersSlider(true)}
@@ -438,7 +441,7 @@ const App: React.FC = () => {
             initial={{ x: 300, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 300, opacity: 0 }}
-            className="fixed top-4 right-4 z-[100] w-full max-w-sm"
+            className="fixed top-4 right-4 z-[180] w-full max-w-sm"
           >
              <div className="bg-black text-white p-4 rounded-2xl shadow-2xl border-l-4 border-green-500 flex items-center space-x-4">
                 <div className="bg-green-600 p-2 rounded-lg text-white">

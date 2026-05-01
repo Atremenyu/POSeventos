@@ -110,7 +110,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] md:hidden"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[160] md:hidden"
             />
             
             {/* Drawer */}
@@ -119,7 +119,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 bottom-0 w-[280px] bg-black border-l border-red-600/30 z-[120] md:hidden shadow-2xl flex flex-col p-6"
+              className="fixed top-0 right-0 bottom-0 w-[280px] bg-black border-l border-red-600/30 z-[170] md:hidden shadow-2xl flex flex-col p-6"
             >
               <div className="flex items-center justify-between mb-12">
                 <div className="flex items-center space-x-3">

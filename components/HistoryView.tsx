@@ -387,8 +387,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
         </div>
       ) : (
         /* History List (Existing) */
-        <div className="bg-white rounded-[3rem] shadow-xl border border-slate-200 overflow-hidden">
-          <div className="p-8 border-b border-slate-200 bg-slate-50 font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="bg-white rounded-[3rem] shadow-xl border border-slate-200 overflow-x-auto">
+          <div className="p-4 sm:p-8 border-b border-slate-200 bg-slate-50 font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4 min-w-[600px] md:min-w-0">
             <span className="flex items-center">
               <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-2"></div>
               Registro de Movimientos
@@ -487,8 +487,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
                   </div>
 
                   {expandedId === order.id && (
-                    <div className="px-24 pb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                      <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-8 space-y-4 shadow-inner">
+                    <div className="px-4 sm:px-24 pb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                      <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-4 sm:p-8 space-y-4 shadow-inner">
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex flex-col border-b border-slate-200 last:border-0 pb-3">
                             <div className="flex justify-between text-xs font-black uppercase tracking-tight">

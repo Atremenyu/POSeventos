@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ViewState } from '../types';
+import { ViewState, User } from '../types';
 import { Icons } from '../constants';
 
 interface TabNavigationProps {
@@ -10,6 +10,9 @@ interface TabNavigationProps {
   pendingCount: number;
   activeOrdersCount: number;
   onToggleOrders: () => void;
+  permissions: ViewState[];
+  currentUser: User;
+  onLogout: () => void;
 }
 
 const TabNavigation: React.FC<TabNavigationProps> = ({ 
@@ -17,7 +20,10 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
   onViewChange, 
   pendingCount,
   activeOrdersCount,
-  onToggleOrders
+  onToggleOrders,
+  permissions,
+  currentUser,
+  onLogout
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -27,7 +33,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
     { id: 'dispatch', icon: <Icons.ChefHat />, label: 'Cocina', badge: pendingCount },
     { id: 'history', icon: <Icons.Chart />, label: 'Admin' },
     { id: 'settings', icon: <Icons.Settings />, label: 'Config' }
-  ];
+  ].filter(tab => permissions.includes(tab.id as ViewState));
 
   const handleTabClick = (id: string) => {
     onViewChange(id as ViewState);
@@ -119,7 +125,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 bottom-0 w-[280px] bg-black border-l border-red-600/30 z-[170] md:hidden shadow-2xl flex flex-col p-6"
+              className="fixed top-0 right-0 bottom-0 w-[280px] bg-black border-l border-red-600/30 z-[170] md:hidden shadow-2xl flex flex-col p-6 overflow-y-auto overflow-x-hidden custom-scrollbar"
             >
               <div className="flex items-center justify-between mb-12">
                 <div className="flex items-center space-x-3">
@@ -180,9 +186,37 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
                 </button>
               </div>
 
-              <div className="mt-auto pt-8 border-t border-slate-900">
-                <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest text-center">
+              <div className="mt-8 pt-8 border-t border-slate-900 space-y-2">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-4 mb-2">Usuario Actual</div>
+                <div className="w-full flex items-center space-x-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
+                  <div className="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center text-white">
+                    <Icons.User size={20} />
+                  </div>
+                  <div className="flex-grow overflow-hidden">
+                    <p className="text-[10px] font-black text-red-500 uppercase tracking-tighter truncate">{currentUser.role}</p>
+                    <p className="text-xs font-black text-white uppercase tracking-tight truncate">{currentUser.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsSidebarOpen(false);
+                    // Use a timeout to ensure the sidebar closes before the confirm dialog pops up 
+                    // which can sometimes cause input issues on mobile
+                    setTimeout(() => onLogout(), 100);
+                  }}
+                  className="w-full flex items-center space-x-4 p-4 rounded-2xl transition-all font-black text-xs uppercase tracking-widest text-red-500 hover:bg-red-600 hover:text-white mt-2"
+                >
+                  <Icons.X size={18} />
+                  <span>Cerrar Sesión</span>
+                </button>
+              </div>
+
+              <div className="mt-auto pt-8 border-t border-slate-900 text-center">
+                <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] mb-1">
                   POS - Red & Black Edition
+                </p>
+                <p className="text-[7px] text-slate-700 font-bold uppercase tracking-widest">
+                  Version 2.1.0
                 </p>
               </div>
             </motion.nav>

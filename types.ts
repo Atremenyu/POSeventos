@@ -10,6 +10,7 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
+  paidQuantity?: number;
   note?: string;
   status?: OrderStatus;
 }
@@ -18,6 +19,12 @@ export type PaymentMethod = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Pendient
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderType = 'dine-in' | 'takeaway';
 export type TakeawayType = 'local' | 'delivery' | 'uber' | 'didi';
+
+export interface PartialPayment {
+  method: PaymentMethod;
+  amount: number;
+  date: string;
+}
 
 export interface Order {
   id: string;
@@ -31,12 +38,35 @@ export interface Order {
   total: number;
   items: CartItem[];
   isPaid: boolean;
+  partialPayments?: PartialPayment[];
   estimatedMinutes?: number;
   preparingAt?: string;
   readyAt?: string;
 }
 
-export type ViewState = 'pos' | 'dispatch' | 'history' | 'settings' | 'tables';
+export interface Shift {
+  id: string;
+  userId: string;
+  userName: string;
+  startTime: string;
+  endTime?: string;
+}
+
+export type ViewState = 'pos' | 'dispatch' | 'history' | 'settings' | 'tables' | 'login';
+
+export type RoleName = 'Admin' | 'Cocinero' | 'Mesero' | 'Caja';
+
+export interface UserRole {
+  name: RoleName;
+  permissions: ViewState[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  pin: string;
+  role: RoleName;
+}
 
 export interface Table {
   id: string;

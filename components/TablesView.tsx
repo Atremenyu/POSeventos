@@ -1,25 +1,50 @@
 
 import React, { useState } from 'react';
-import { Table, Order, PaymentMethod } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
+import { Table, Order, PaymentMethod, CartItem } from '../types';
 import { Icons } from '../constants';
 import { generateTicketPDF } from '../services/pdfGenerator';
+import ConfirmationModal from './ConfirmationModal';
 
 interface TablesViewProps {
   tables: Table[];
   orders: Order[];
   onSelectTable: (tableId: string) => void;
   onPay: (id: string, payment: PaymentMethod) => void;
+  onSplitOrder: (id: string, splitQuantities: Record<number, number>, payment: PaymentMethod) => void;
   onCancel: (id: string) => void;
   onDeliver: (id: string) => void;
   restaurantName: string;
 }
 
 const TablesView: React.FC<TablesViewProps> = ({ 
-  tables, orders, onSelectTable, onPay, onCancel, onDeliver, restaurantName 
+  tables, orders, onSelectTable, onPay, onSplitOrder, onCancel, onDeliver, restaurantName 
 }) => {
   const [managingTableId, setManagingTableId] = useState<string | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Split Bill State
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
+  const [cashReceived, setCashReceived] = useState<string>('');
+
+  // Confirmation state
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const triggerConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ isOpen: true, title, message, onConfirm });
+  };
 
   const filteredTables = tables.filter(t => 
     t.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -36,13 +61,46 @@ const TablesView: React.FC<TablesViewProps> = ({
     if (status === 'occupied') {
       setManagingTableId(table.id);
       setSelectedPayment(null);
+      setIsSplitMode(false);
+      setSplitQuantities({});
     } else {
       onSelectTable(table.id);
     }
   };
 
+  const updateSplitQty = (idx: number, delta: number, max: number) => {
+    setSplitQuantities(prev => {
+      const current = prev[idx] || 0;
+      const next = Math.max(0, Math.min(max, current + delta));
+      return { ...prev, [idx]: next };
+    });
+  };
+
   const managingTable = tables.find(t => t.id === managingTableId);
   const { order: managingOrder } = managingTable ? getTableStatus(managingTable) : { order: null };
+
+  const splitTotal = managingOrder ? Object.entries(splitQuantities).reduce((acc, [idx, qty]) => {
+    const item = managingOrder.items[Number(idx)];
+    return acc + (item.price * qty);
+  }, 0) : 0;
+
+  const handleConfirmSplit = () => {
+    if (!managingOrder || !selectedPayment) return;
+    
+    onSplitOrder(managingOrder.id, splitQuantities, selectedPayment);
+    
+    // Reset or close if finished
+    const totalSelectedQty = Object.values(splitQuantities).reduce((a, b) => a + b, 0);
+    const totalRemainingQty = managingOrder.items.reduce((acc, i) => acc + (i.quantity - (i.paidQuantity || 0)), 0);
+    
+    if (totalSelectedQty >= totalRemainingQty) {
+      setManagingTableId(null);
+    } else {
+      setIsSplitMode(false);
+      setSplitQuantities({});
+      setSelectedPayment(null);
+    }
+  };
 
   return (
     <div className="p-6 h-full overflow-auto relative">
@@ -145,86 +203,222 @@ const TablesView: React.FC<TablesViewProps> = ({
               <div className="flex-grow overflow-y-auto p-4 sm:p-8 space-y-6">
                 {/* Items List */}
                 <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Resumen de Cuenta</h4>
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumen de Cuenta</h4>
+                    <button 
+                      onClick={() => setIsSplitMode(!isSplitMode)}
+                      className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full transition-all ${isSplitMode ? 'bg-red-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:text-black'}`}
+                    >
+                      {isSplitMode ? 'Cancelar División' : 'Dividir Cuenta'}
+                    </button>
+                  </div>
                   <div className="space-y-3">
-                    {managingOrder.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                        <div className="flex items-center space-x-3">
-                          <span className="bg-black text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg">{item.quantity}</span>
-                          <div>
-                            <span className="text-xs font-black uppercase tracking-tight text-slate-800">{item.name}</span>
-                            {item.note && <p className="text-[9px] italic text-red-500 font-bold">{item.note}</p>}
+                    {managingOrder.items.map((item, idx) => {
+                      const remainingQty = item.quantity - (item.paidQuantity || 0);
+                      const isFullyPaid = remainingQty <= 0;
+                      
+                      return (
+                        <div key={idx} className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${isFullyPaid ? 'opacity-50 grayscale' : (isSplitMode && splitQuantities[idx] > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100')}`}>
+                          <div className="flex items-center space-x-3">
+                            {isSplitMode && !isFullyPaid ? (
+                              <div className="flex items-center space-x-1 bg-white rounded-lg border border-slate-200 p-0.5">
+                                <button 
+                                  onClick={() => updateSplitQty(idx, -1, remainingQty)}
+                                  className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-50 rounded transition"
+                                >
+                                  <Icons.Minus />
+                                </button>
+                                <span className="text-[10px] font-black w-4 text-center">{splitQuantities[idx] || 0}</span>
+                                <button 
+                                  onClick={() => updateSplitQty(idx, 1, remainingQty)}
+                                  className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-50 rounded transition"
+                                >
+                                  <Icons.Plus />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center">
+                                <span className="bg-black text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-lg">
+                                  {item.quantity}
+                                </span>
+                                {item.paidQuantity && item.paidQuantity > 0 && !isFullyPaid && (
+                                  <span className="text-[8px] font-black text-green-600 mt-0.5">Pagado: {item.paidQuantity}</span>
+                                )}
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-xs font-black uppercase tracking-tight text-slate-800">
+                                {item.name} {isFullyPaid && '(PAGADO)'}
+                              </span>
+                              {item.note && <p className="text-[9px] italic text-red-500 font-bold">{item.note}</p>}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-black tracking-tighter text-black block">
+                              {isSplitMode && splitQuantities[idx] > 0 
+                                ? `$${(item.price * splitQuantities[idx]).toLocaleString()}` 
+                                : `$${(item.price * item.quantity).toLocaleString()}`}
+                            </span>
+                            {!isSplitMode && item.paidQuantity && item.paidQuantity > 0 && !isFullyPaid && (
+                              <span className="text-[8px] font-black text-slate-400">Resta: ${(item.price * remainingQty).toLocaleString()}</span>
+                            )}
                           </div>
                         </div>
-                        <span className="text-sm font-black tracking-tighter text-black">${(item.price * item.quantity).toLocaleString()}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <div className="flex justify-between items-center px-2 py-4 bg-black text-white rounded-2xl mt-4">
-                    <span className="text-xs font-black uppercase tracking-widest opacity-60">Total a Pagar</span>
-                    <span className="text-2xl font-black tracking-tighter">${managingOrder.total.toLocaleString()}</span>
+
+                  <div className={`flex justify-between items-center px-4 py-4 rounded-2xl mt-4 transition-colors ${isSplitMode ? 'bg-red-600 text-white shadow-xl shadow-red-100' : 'bg-black text-white'}`}>
+                    <span className="text-xs font-black uppercase tracking-widest opacity-60">
+                      {isSplitMode ? 'Total a Pagar (Seleccionado)' : (managingOrder.partialPayments && managingOrder.partialPayments.length > 0 ? 'Resta por Pagar' : 'Total de la Mesa')}
+                    </span>
+                    <span className="text-2xl font-black tracking-tighter">
+                      ${(isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0))).toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
-                {/* Actions Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                   <button 
-                    onClick={() => onSelectTable(managingTable.id)}
-                    className="flex flex-col items-center justify-center p-4 bg-slate-900 text-white rounded-3xl hover:bg-black transition-all active:scale-95 space-y-2 border-b-4 border-slate-700"
-                   >
-                     <Icons.Cart />
-                     <span className="text-[10px] font-black uppercase tracking-widest">Añadir Items</span>
-                   </button>
-                   <button 
-                    onClick={() => generateTicketPDF(managingOrder, restaurantName)}
-                    className="flex flex-col items-center justify-center p-4 bg-white border-2 border-slate-200 text-slate-600 rounded-3xl hover:border-red-600 hover:text-red-600 transition-all active:scale-95 space-y-2"
-                   >
-                     <Icons.FileText />
-                     <span className="text-[10px] font-black uppercase tracking-widest">Imprimir Pre-cuenta</span>
-                   </button>
-                </div>
+                {!isSplitMode && (
+                  <div className="grid grid-cols-2 gap-4">
+                     <button 
+                      onClick={() => onSelectTable(managingTable.id)}
+                      className="flex flex-col items-center justify-center p-4 bg-slate-900 text-white rounded-3xl hover:bg-black transition-all active:scale-95 space-y-2 border-b-4 border-slate-700"
+                     >
+                       <Icons.Cart />
+                       <span className="text-[10px] font-black uppercase tracking-widest">Añadir Items</span>
+                     </button>
+                     <button 
+                      onClick={() => generateTicketPDF(managingOrder, restaurantName)}
+                      className="flex flex-col items-center justify-center p-4 bg-white border-2 border-slate-200 text-slate-600 rounded-3xl hover:border-red-600 hover:text-red-600 transition-all active:scale-95 space-y-2"
+                     >
+                       <Icons.FileText />
+                       <span className="text-[10px] font-black uppercase tracking-widest">Imprimir Pre-cuenta</span>
+                     </button>
+                  </div>
+                )}
 
                 {/* Payment Section */}
                 <div className="space-y-4 pt-4 border-t border-slate-100">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Método de Pago</h4>
                   <div className="grid grid-cols-3 gap-2">
-                    {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(met => (
-                      <button 
-                        key={met}
-                        onClick={() => setSelectedPayment(met)}
-                        className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
-                          selectedPayment === met 
-                          ? 'border-red-600 bg-red-600 text-white shadow-lg' 
-                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
-                        }`}
-                      >
-                        {met}
-                      </button>
-                    ))}
+                    {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(met => {
+                      const isSelected = selectedPayment === met;
+                      const isCash = met === 'Efectivo';
+                      const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+
+                      return (
+                        <div key={met} className={isSelected && isCash ? 'col-span-3' : ''}>
+                          <button 
+                            onClick={() => {
+                              setSelectedPayment(met);
+                              setCashReceived('');
+                            }}
+                            className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                              isSelected 
+                              ? 'border-red-600 bg-red-600 text-white shadow-lg' 
+                              : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                            }`}
+                          >
+                            {met}
+                          </button>
+
+                          {isSelected && isCash && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className="mt-3 p-4 bg-red-50 border-2 border-red-100 rounded-2xl space-y-4 overflow-hidden"
+                            >
+                              <div className="flex justify-between items-end">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Recibido</p>
+                                  <div className="relative">
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xl font-black text-red-300">$</span>
+                                    <input 
+                                      type="text"
+                                      inputMode="decimal"
+                                      className="w-full bg-transparent border-none outline-none pl-6 text-2xl font-black tracking-tighter text-black placeholder:text-red-100"
+                                      placeholder="0.00"
+                                      autoFocus
+                                      value={cashReceived}
+                                      onChange={(e) => {
+                                        const val = e.target.value.replace(/,/g, '.');
+                                        if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                                          setCashReceived(val);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                {cashReceived && parseFloat(cashReceived) > 0 && (
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Cambio</p>
+                                    <p className="text-2xl font-black text-green-600 tracking-tighter">
+                                      ${Math.max(0, parseFloat(cashReceived) - amountToPay).toLocaleString()}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-red-100">
+                                {[500, 1000, 2000, 5000].map(amount => (
+                                  <button 
+                                    key={amount}
+                                    onClick={() => setCashReceived(amount.toString())}
+                                    className="py-1.5 bg-white hover:bg-black hover:text-white rounded-lg text-[9px] font-black transition-all border border-red-100 uppercase"
+                                  >
+                                    ${amount.toLocaleString()}
+                                  </button>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+
                   <button 
                     onClick={() => {
                       if (selectedPayment) {
-                        onPay(managingOrder.id, selectedPayment);
-                        setManagingTableId(null);
+                        const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                        if (selectedPayment === 'Efectivo') {
+                          const received = parseFloat(cashReceived);
+                          if (isNaN(received) || received < amountToPay) {
+                            alert(`El cliente debe entregar al menos $${amountToPay.toLocaleString()}`);
+                            return;
+                          }
+                        }
+
+                        if (isSplitMode) {
+                          handleConfirmSplit();
+                        } else {
+                          onPay(managingOrder.id, selectedPayment);
+                          setManagingTableId(null);
+                        }
                       }
                     }}
-                    disabled={!selectedPayment}
+                    disabled={!selectedPayment || (isSplitMode && splitTotal === 0)}
                     className={`w-full py-5 rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 flex items-center justify-center space-x-3 ${
-                      selectedPayment 
+                      selectedPayment && (!isSplitMode || splitTotal > 0)
                       ? 'bg-red-600 text-white border-red-900 hover:bg-black hover:border-slate-800' 
                       : 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed'
                     }`}
                   >
                     <Icons.CreditCard />
-                    <span>COBRAR Y CERRAR</span>
+                    <span>{isSplitMode ? 'COBRAR PARCIAL' : 'COBRAR Y CERRAR'}</span>
                   </button>
                 </div>
               </div>
 
               <div className="p-6 bg-slate-50 flex justify-between items-center border-t border-slate-200">
                 <button 
-                  onClick={() => { if(confirm('¿Anular orden completa?')) { onCancel(managingOrder.id); setManagingTableId(null); } }}
+                  onClick={() => { 
+                    triggerConfirm(
+                      'Anular Cuenta',
+                      `¿Estás seguro de anular la orden de la mesa ${managingTable.name}? Se perderán todos los items cargados.`,
+                      () => { onCancel(managingOrder.id); setManagingTableId(null); }
+                    );
+                  }}
                   className="text-[10px] font-black uppercase text-slate-400 hover:text-red-600"
                 >
                   Anular Cuenta
@@ -246,6 +440,14 @@ const TablesView: React.FC<TablesViewProps> = ({
           </div>
         )}
       </div>
+      <ConfirmationModal 
+        isOpen={confirmState.isOpen}
+        onClose={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmState.onConfirm}
+        title={confirmState.title}
+        message={confirmState.message}
+        type="danger"
+      />
     </div>
   );
 };

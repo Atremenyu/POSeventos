@@ -23,26 +23,63 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
 
   const paymentMethods = useMemo(() => {
     const methods = new Set<string>();
-    orders.forEach(o => methods.add(o.payment));
-    return Array.from(methods);
+    orders.forEach(o => {
+      if (o.partialPayments && o.partialPayments.length > 0) {
+        o.partialPayments.forEach(p => methods.add(p.method));
+      } else {
+        methods.add(o.payment);
+      }
+    });
+    return Array.from(methods).filter(m => m !== 'Pendiente');
   }, [orders]);
 
   const analyticsData = useMemo(() => {
-    const validOrders = orders.filter(o => o.isPaid && o.status !== 'cancelled');
+    const validOrders = orders.filter(o => o.status !== 'cancelled');
     
-    // Daily Sales
+    // Revenue and Methods
+    let totalRevenue = 0;
     const dailyMap = new Map<string, number>();
+    const hourlyMap = new Map<number, number>();
+    for (let i = 0; i < 24; i++) hourlyMap.set(i, 0);
+    const methodsMap = new Map<string, number>();
+
     validOrders.forEach(o => {
-      const day = new Date(o.date).toLocaleDateString();
-      dailyMap.set(day, (dailyMap.get(day) || 0) + o.total);
+      if (o.partialPayments && o.partialPayments.length > 0) {
+        o.partialPayments.forEach(p => {
+          const day = new Date(p.date).toLocaleDateString();
+          const hour = new Date(p.date).getHours();
+          const amount = p.amount;
+
+          totalRevenue += amount;
+          dailyMap.set(day, (dailyMap.get(day) || 0) + amount);
+          hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + amount);
+          methodsMap.set(p.method, (methodsMap.get(p.method) || 0) + amount);
+        });
+      } else if (o.isPaid) {
+        // Fallback for orders without partialPayments array (older data or legacy)
+        const day = new Date(o.date).toLocaleDateString();
+        const hour = new Date(o.date).getHours();
+        totalRevenue += o.total;
+        dailyMap.set(day, (dailyMap.get(day) || 0) + o.total);
+        hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + o.total);
+        methodsMap.set(o.payment, (methodsMap.get(o.payment) || 0) + o.total);
+      }
     });
+
     const daily = Array.from(dailyMap.entries())
       .map(([date, total]) => ({ date, total }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+    const hourly = Array.from(hourlyMap.entries()).map(([hour, total]) => ({
+      hour: `${hour}:00`,
+      total
+    }));
+
+    const methods = Array.from(methodsMap.entries()).map(([name, value]) => ({ name, value }));
+
     // Top Products
     const productMap = new Map<string, number>();
-    validOrders.forEach(o => {
+    validOrders.filter(o => o.isPaid).forEach(o => {
       o.items.forEach(item => {
         productMap.set(item.name, (productMap.get(item.name) || 0) + item.quantity);
       });
@@ -52,28 +89,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
       .sort((a, b) => b.sales - a.sales)
       .slice(0, 8);
 
-    // Hourly Sales
-    const hourlyMap = new Map<number, number>();
-    for (let i = 0; i < 24; i++) hourlyMap.set(i, 0);
-    validOrders.forEach(o => {
-      const hour = new Date(o.date).getHours();
-      hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + o.total);
-    });
-    const hourly = Array.from(hourlyMap.entries()).map(([hour, total]) => ({
-      hour: `${hour}:00`,
-      total
-    }));
-
-    // Method Distribution
-    const methodsMap = new Map<string, number>();
-    validOrders.forEach(o => {
-      methodsMap.set(o.payment, (methodsMap.get(o.payment) || 0) + 1);
-    });
-    const methods = Array.from(methodsMap.entries()).map(([name, value]) => ({ name, value }));
-
-    const totalRevenue = validOrders.reduce((acc, o) => acc + o.total, 0);
-    const orderCount = validOrders.length;
-    const deliveredCount = validOrders.filter(o => o.status === 'delivered').length;
+    const paidOrders = validOrders.filter(o => o.isPaid);
+    const orderCount = paidOrders.length;
+    const deliveredCount = paidOrders.filter(o => o.status === 'delivered').length;
     const avgOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
 
     // Occupancy
@@ -88,7 +106,13 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
 
   const displayOrders = useMemo(() => {
     return orders
-      .filter(o => paymentFilter === 'all' || o.payment === paymentFilter)
+      .filter(o => {
+        if (paymentFilter === 'all') return true;
+        if (o.partialPayments && o.partialPayments.length > 0) {
+          return o.partialPayments.some(p => p.method === paymentFilter);
+        }
+        return o.payment === paymentFilter;
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [orders, paymentFilter]);
 
@@ -495,6 +519,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
                               <span className="text-slate-600 flex items-center">
                                 <span className="bg-white border border-slate-200 w-6 h-6 flex items-center justify-center rounded-lg text-[10px] mr-3">{item.quantity}</span>
                                 {item.name}
+                                {item.paidQuantity && item.paidQuantity > 0 && (
+                                  <span className="ml-2 text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">PAGADO: {item.paidQuantity}</span>
+                                )}
                               </span>
                               <span className="text-black">${(item.price * item.quantity).toLocaleString()}</span>
                             </div>
@@ -505,6 +532,24 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
                             )}
                           </div>
                         ))}
+
+                        {order.partialPayments && order.partialPayments.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-dashed border-slate-300">
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Desglose de Pagos</h4>
+                             <div className="space-y-2">
+                               {order.partialPayments.map((p, i) => (
+                                 <div key={i} className="flex justify-between items-center text-[10px] font-bold uppercase tracking-tight">
+                                   <div className="flex items-center space-x-2">
+                                     <span className="text-slate-400">{new Date(p.date).toLocaleDateString()}</span>
+                                     <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                     <span className="text-black">{p.method}</span>
+                                   </div>
+                                   <span className="text-green-600">${p.amount.toLocaleString()}</span>
+                                 </div>
+                               ))}
+                             </div>
+                          </div>
+                        )}
                         <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end space-x-4">
                            <button 
                             onClick={(e) => { e.stopPropagation(); window.print(); }}

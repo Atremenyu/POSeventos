@@ -20,30 +20,30 @@ const ActiveOrdersSlider: React.FC<ActiveOrdersSliderProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[80] flex justify-end overflow-hidden pointer-events-none">
+        <div className="fixed top-16 right-0 bottom-0 left-0 z-[70] flex justify-end overflow-hidden pointer-events-none">
           {/* Transparent backdrop that handles clicks but allows the drawer to be below header visually */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto"
+            className="absolute inset-0 bg-black/10 backdrop-blur-[1px] pointer-events-auto"
           />
           
           <motion.div 
             drag="x"
             dragConstraints={{ left: 0, right: 450 }}
-            dragElastic={0.1}
+            dragElastic={0.05}
             onDragEnd={(_, info) => {
-              if (info.offset.x > 100 || info.velocity.x > 500) {
+              if (info.offset.x > 80 || info.velocity.x > 400) {
                 onClose();
               }
             }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="relative w-full md:w-[450px] bg-white shadow-[-20px_0_50px_-10px_rgba(0,0,0,0.3)] h-[calc(100vh-64px)] mt-16 pointer-events-auto flex flex-col border-l border-slate-200"
+            transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+            className="relative w-full md:w-[450px] bg-white shadow-[-20px_0_50px_-10px_rgba(0,0,0,0.2)] h-full pointer-events-auto flex flex-col border-l border-slate-200"
           >
             {/* Drag Handle Indicator */}
             <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-12 bg-slate-200 rounded-full md:flex hidden" />

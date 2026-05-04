@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus } from './types';
+import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift } from './types';
 import { storage } from './services/storage';
-import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_TABLES, Icons } from './constants';
+import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_TABLES, INITIAL_USERS, ROLES, Icons } from './constants';
 import POSView from './components/POSView';
 import DispatchView from './components/DispatchView';
 import HistoryView from './components/HistoryView';
@@ -11,6 +11,7 @@ import TablesView from './components/TablesView';
 import ProductManagement from './components/ProductManagement';
 import TabNavigation from './components/TabNavigation';
 import ActiveOrdersSlider from './components/ActiveOrdersSlider';
+import { LoginView } from './components/LoginView';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('pos');
@@ -19,6 +20,10 @@ const App: React.FC = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentShiftId, setCurrentShiftId] = useState<string | null>(null);
   
   const [restaurantName, setRestaurantName] = useState('Mi Restaurante');
   const [eventType, setEventType] = useState('Evento Gastronómico');
@@ -26,6 +31,7 @@ const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeNotification, setActiveNotification] = useState<{ id: string, message: string, type: 'ready' } | null>(null);
   const [showOrdersSlider, setShowOrdersSlider] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -33,6 +39,8 @@ const App: React.FC = () => {
     const savedCategories = storage.getCategories();
     const savedTables = storage.getTables();
     const savedOrders = storage.getOrders();
+    const savedUsers = storage.getUsers();
+    const savedShifts = storage.getShifts();
     const savedName = storage.getRestaurantName();
     const savedType = storage.getEventType();
 
@@ -40,6 +48,8 @@ const App: React.FC = () => {
     setCategories(savedCategories.length > 0 ? savedCategories : INITIAL_CATEGORIES);
     setTables(savedTables.length > 0 ? savedTables : INITIAL_TABLES);
     setOrders(savedOrders);
+    setUsers(savedUsers.length > 0 ? savedUsers : INITIAL_USERS);
+    setShifts(savedShifts);
     setRestaurantName(savedName);
     setEventType(savedType);
     setIsLoaded(true);
@@ -62,6 +72,14 @@ const App: React.FC = () => {
     if (isLoaded) storage.saveOrders(orders);
   }, [orders, isLoaded]);
 
+  useEffect(() => {
+    if (isLoaded) storage.saveUsers(users);
+  }, [users, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) storage.saveShifts(shifts);
+  }, [shifts, isLoaded]);
+
   const restoreDatabase = (data: any) => {
     // 1. Persistencia inmediata y forzada para evitar fallos de renderizado
     if (data.products) storage.saveProducts(data.products);
@@ -70,12 +88,16 @@ const App: React.FC = () => {
     if (data.orders) storage.saveOrders(data.orders);
     if (data.restaurantName) storage.saveRestaurantName(data.restaurantName);
     if (data.eventType) storage.saveEventType(data.eventType);
+    if (data.users) storage.saveUsers(data.users);
+    if (data.shifts) storage.saveShifts(data.shifts);
 
     // 2. Actualización de estado de React para reflejar en UI
     setProducts(data.products || []);
     setCategories(data.categories || []);
     setTables(data.tables || []);
     setOrders(data.orders || []);
+    setUsers(data.users || INITIAL_USERS);
+    setShifts(data.shifts || []);
     setRestaurantName(data.restaurantName || 'Mi Restaurante');
     setEventType(data.eventType || 'Evento Gastronómico');
     
@@ -83,6 +105,98 @@ const App: React.FC = () => {
     setCart([]);
     
     console.log("Base de datos restaurada correctamente en el estado global.");
+  };
+
+  const splitOrder = (orderId: string, splitQuantities: Record<number, number>, payment: PaymentMethod) => {
+    setOrders(prev => {
+      const order = prev.find(o => o.id === orderId);
+      if (!order) return prev;
+
+      let currentPaidTotal = 0;
+      const updatedItems = order.items.map((item, idx) => {
+        const qtyToPay = splitQuantities[idx] || 0;
+        const currentPaid = item.paidQuantity || 0;
+        const newPaid = currentPaid + qtyToPay;
+        currentPaidTotal += item.price * qtyToPay;
+        return { ...item, paidQuantity: newPaid };
+      });
+
+      const newPartialPayment = {
+        method: payment,
+        amount: currentPaidTotal,
+        date: new Date().toISOString()
+      };
+
+      const partialPayments = [...(order.partialPayments || []), newPartialPayment];
+      
+      const allPaid = updatedItems.every(item => 
+        (item.paidQuantity || 0) >= item.quantity
+      );
+
+      if (allPaid) {
+        if (order.type === 'dine-in' && order.table) {
+          setTables(prevTables => prevTables.map(t => 
+            t.name === order.table ? { ...t, isOccupied: false } : t
+          ));
+        }
+      }
+
+      return prev.map(o => o.id === orderId ? {
+        ...o,
+        items: updatedItems,
+        isPaid: allPaid,
+        payment: allPaid ? payment : o.payment,
+        status: allPaid ? 'delivered' : o.status,
+        partialPayments
+      } : o);
+    });
+  };
+
+  const currentUserRole = useMemo(() => 
+    ROLES.find(r => r.name === currentUser?.role),
+  [currentUser]);
+
+  const canAccessView = (v: ViewState) => {
+    if (!currentUserRole) return false;
+    return currentUserRole.permissions.includes(v);
+  };
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    
+    // Start shift
+    const newShift: Shift = {
+      id: Date.now().toString(),
+      userId: user.id,
+      userName: user.name,
+      startTime: new Date().toISOString()
+    };
+    setShifts(prev => [newShift, ...prev]);
+    setCurrentShiftId(newShift.id);
+
+    // Set first available view
+    const role = ROLES.find(r => r.name === user.role);
+    if (role && role.permissions.length > 0) {
+      setView(role.permissions[0]);
+    }
+  };
+
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    // End shift
+    if (currentShiftId) {
+      setShifts(prev => prev.map(s => 
+        s.id === currentShiftId ? { ...s, endTime: new Date().toISOString() } : s
+      ));
+    }
+
+    setCurrentUser(null);
+    setCurrentShiftId(null);
+    setView('login');
+    setShowLogoutConfirm(false);
   };
 
   const pendingCount = useMemo(() => 
@@ -162,18 +276,28 @@ const App: React.FC = () => {
       }
     }
 
+    const isPaidImmediately = type !== 'dine-in';
     const newOrder: Order = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
       client: finalClient,
       table: finalTable,
-      payment: type === 'dine-in' ? 'Pendiente' : payment,
+      payment: isPaidImmediately ? payment : 'Pendiente',
       status: 'pending',
       type,
       takeawayType,
       total,
-      items: cart.map(item => ({ ...item, status: 'pending' as OrderStatus })),
-      isPaid: type === 'dine-in' ? false : true,
+      items: cart.map(item => ({ 
+        ...item, 
+        status: 'pending' as OrderStatus,
+        paidQuantity: isPaidImmediately ? item.quantity : 0 
+      })),
+      isPaid: isPaidImmediately,
+      partialPayments: isPaidImmediately ? [{
+        method: payment,
+        amount: total,
+        date: new Date().toISOString()
+      }] : []
     };
 
     setOrders(prev => [newOrder, ...prev]);
@@ -282,9 +406,40 @@ const App: React.FC = () => {
   };
 
   const payOrder = (orderId: string, payment: PaymentMethod) => {
-    setOrders(prev => prev.map(o => 
-      o.id === orderId ? { ...o, isPaid: true, payment } : o
-    ));
+    const orderToPay = orders.find(o => o.id === orderId);
+    if (!orderToPay) return;
+
+    if (orderToPay.type === 'dine-in' && orderToPay.table) {
+      const tableToFree = orderToPay.table;
+      setTables(prev => prev.map(t => 
+        t.name === tableToFree ? { ...t, isOccupied: false } : t
+      ));
+    }
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        const alreadyPaid = o.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+        const remainingAmount = Math.max(0, o.total - alreadyPaid);
+        
+        const finalPartialPayment = {
+          method: payment,
+          amount: remainingAmount,
+          date: new Date().toISOString()
+        };
+
+        const updatedPartialPayments = [...(o.partialPayments || []), finalPartialPayment];
+
+        return { 
+          ...o, 
+          isPaid: true, 
+          payment, 
+          status: 'delivered',
+          partialPayments: updatedPartialPayments,
+          items: o.items.map(item => ({ ...item, paidQuantity: item.quantity }))
+        };
+      }
+      return o;
+    }));
   };
 
   const cancelOrder = (orderId: string) => {
@@ -317,6 +472,10 @@ const App: React.FC = () => {
     );
   }
 
+  if (!currentUser) {
+    return <LoginView users={users} onLogin={handleLogin} />;
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
       <header className="bg-black text-white shadow-md flex-shrink-0 z-[100] relative no-print border-b border-red-600">
@@ -340,7 +499,27 @@ const App: React.FC = () => {
             pendingCount={pendingCount} 
             activeOrdersCount={orders.filter(o => !(o.isPaid && o.status === 'delivered') && o.status !== 'cancelled').length}
             onToggleOrders={() => setShowOrdersSlider(true)}
+            permissions={currentUserRole?.permissions || []}
+            currentUser={currentUser}
+            onLogout={handleLogout}
           />
+
+          <div className="hidden lg:flex items-center space-x-3">
+             <div className="flex flex-col items-end leading-none">
+                <span className="text-[9px] font-black uppercase text-red-500 tracking-tighter">{currentUser.role}</span>
+                <span className="text-sm font-black uppercase tracking-tight">{currentUser.name}</span>
+             </div>
+             <button 
+               onClick={() => {
+                 console.log("Logout triggered");
+                 handleLogout();
+               }}
+               className="p-2 rounded-xl bg-slate-100/10 text-white/50 hover:bg-red-600 hover:text-white transition-all border border-white/10 hover:border-red-600"
+               title="Cerrar Sesión"
+             >
+               <Icons.X size={18} />
+             </button>
+          </div>
         </div>
       </header>
 
@@ -396,6 +575,7 @@ const App: React.FC = () => {
                 setView('pos');
               }}
               onPay={payOrder}
+              onSplitOrder={splitOrder}
               onCancel={cancelOrder}
               onDeliver={deliverOrder}
               restaurantName={restaurantName}
@@ -415,6 +595,9 @@ const App: React.FC = () => {
               eventType={eventType}
               onUpdateSettings={handleUpdateSettings}
               onRestoreDatabase={restoreDatabase}
+              users={users}
+              setUsers={setUsers}
+              shifts={shifts}
             />
           )}
         </div>
@@ -461,6 +644,50 @@ const App: React.FC = () => {
                 </button>
              </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLogoutConfirm(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl relative z-[1001] text-center"
+            >
+              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600">
+                <Icons.X size={40} />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2">Cerrar Sesión</h2>
+              <p className="text-slate-500 font-medium tracking-tight mb-8">
+                ¿Estás seguro que deseas salir? El turno actual se cerrará automáticamente.
+              </p>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={confirmLogout}
+                  className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-700 transition shadow-lg shadow-red-200"
+                >
+                  Sí, Cerrar Sesión
+                </button>
+                <button 
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

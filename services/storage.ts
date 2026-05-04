@@ -1,5 +1,5 @@
 
-import { Product, Order, Category, Table } from '../types';
+import { Product, Order, Category, Table, User, Shift } from '../types';
 
 const KEYS = {
   PRODUCTS: 'comanda_productos',
@@ -8,6 +8,8 @@ const KEYS = {
   TABLES: 'comanda_tablas',
   RESTAURANT_NAME: 'comanda_restaurant_name',
   EVENT_TYPE: 'comanda_event_type',
+  USERS: 'comanda_usuarios',
+  SHIFTS: 'comanda_turnos',
 };
 
 export const storage = {
@@ -38,6 +40,20 @@ export const storage = {
   },
   saveTables: (tables: Table[]) => {
     localStorage.setItem(KEYS.TABLES, JSON.stringify(tables));
+  },
+  getUsers: (): User[] => {
+    const data = localStorage.getItem(KEYS.USERS);
+    return data ? JSON.parse(data) : [];
+  },
+  saveUsers: (users: User[]) => {
+    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+  },
+  getShifts: (): Shift[] => {
+    const data = localStorage.getItem(KEYS.SHIFTS);
+    return data ? JSON.parse(data) : [];
+  },
+  saveShifts: (shifts: Shift[]) => {
+    localStorage.setItem(KEYS.SHIFTS, JSON.stringify(shifts));
   },
   getRestaurantName: (): string => {
     return localStorage.getItem(KEYS.RESTAURANT_NAME) || 'Mi Restaurante';

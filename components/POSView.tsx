@@ -36,6 +36,7 @@ const POSView: React.FC<POSViewProps> = ({
   const [takeawayType, setTakeawayType] = useState<TakeawayType>('local');
   const [showCheckout, setShowCheckout] = useState(false);
   const [cartExpanded, setCartExpanded] = useState(false);
+  const [cashReceived, setCashReceived] = useState<string>('');
 
   // Sync with initialTableId from TablesView
   useEffect(() => {
@@ -89,6 +90,16 @@ const POSView: React.FC<POSViewProps> = ({
   }, [orders, table, orderType]);
 
   const handleCheckoutSubmit = () => {
+    // Basic validation for cash payments in POSView
+    if (payment === 'Efectivo' && orderType === 'takeaway' && takeawayType !== 'uber' && takeawayType !== 'didi') {
+      const received = parseFloat(cashReceived);
+      if (isNaN(received) || received < total) {
+        const diff = total - (isNaN(received) ? 0 : received);
+        alert(`Monto insuficiente. Faltan $${diff.toLocaleString()} para cubrir el total de $${total.toLocaleString()}`);
+        return;
+      }
+    }
+    
     onCheckout(client, table, payment, orderType, orderType === 'takeaway' ? takeawayType : undefined);
     setClient('');
     setTable('');
@@ -96,6 +107,7 @@ const POSView: React.FC<POSViewProps> = ({
     setOrderType('dine-in');
     setTakeawayType('local');
     setShowCheckout(false);
+    setCashReceived('');
   };
 
   const hasReadyOrders = useMemo(() => orders.some(o => o.status === 'ready'), [orders]);
@@ -458,27 +470,92 @@ const POSView: React.FC<POSViewProps> = ({
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pago</h4>
                       <div className="grid grid-cols-1 gap-2">
-                        {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(method => (
-                          <button
-                            key={method}
-                            onClick={() => setPayment(method)}
-                            className={`flex items-center space-x-3 p-3 rounded-xl border-2 transition-all ${
-                              payment === method 
-                              ? 'border-red-600 bg-red-50 text-red-700' 
-                              : 'border-slate-100 bg-white text-slate-600 hover:border-slate-200'
-                            }`}
-                          >
-                            <div className={`p-2 rounded-lg ${payment === method ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                              <Icons.CreditCard />
+                        {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(method => {
+                          const isSelected = payment === method;
+                          const isCash = method === 'Efectivo';
+                          
+                          return (
+                            <div key={method} className="space-y-2">
+                              <button
+                                onClick={() => {
+                                  setPayment(method);
+                                  setCashReceived('');
+                                }}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
+                                  isSelected 
+                                  ? 'border-red-600 bg-red-50 text-red-700' 
+                                  : 'border-slate-100 bg-white text-slate-600 hover:border-slate-200'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                    {method === 'Efectivo' && <Icons.DollarSign size={18} />}
+                                    {method === 'Tarjeta' && <Icons.CreditCard size={18} />}
+                                    {method === 'Transferencia' && <Icons.Smartphone size={18} />}
+                                  </div>
+                                  <span className="font-black text-xs uppercase tracking-tight">{method}</span>
+                                </div>
+                                {isSelected && (
+                                  <div className="text-red-600">
+                                    <Icons.CheckCircle size={20} />
+                                  </div>
+                                )}
+                              </button>
+
+                              {isSelected && isCash && (
+                                <motion.div 
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl space-y-4 overflow-hidden"
+                                >
+                                  <div className="flex justify-between items-end">
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Recibido</p>
+                                      <div className="relative">
+                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xl font-black text-red-300">$</span>
+                                        <input 
+                                          type="text"
+                                          inputMode="decimal"
+                                          className="w-full bg-transparent border-none outline-none pl-6 text-2xl font-black tracking-tighter text-black placeholder:text-red-100"
+                                          placeholder="0.00"
+                                          autoFocus
+                                          value={cashReceived}
+                                          onChange={(e) => {
+                                            const val = e.target.value.replace(/,/g, '.');
+                                            // Only allow numbers and a single decimal point
+                                            if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                                              setCashReceived(val);
+                                            }
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                    {cashReceived && parseFloat(cashReceived) > 0 && (
+                                      <div className="text-right">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Cambio</p>
+                                        <p className="text-2xl font-black text-green-600 tracking-tighter">
+                                          ${Math.max(0, parseFloat(cashReceived) - total).toLocaleString()}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-red-100">
+                                    {[500, 1000, 2000, 5000, 10000, 20000].map(amount => (
+                                      <button 
+                                        key={amount}
+                                        onClick={() => setCashReceived(amount.toString())}
+                                        className="py-1.5 bg-white hover:bg-black hover:text-white rounded-lg text-[9px] font-black transition-all border border-red-100 uppercase"
+                                      >
+                                        ${amount.toLocaleString()}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </motion.div>
+                              )}
                             </div>
-                            <span className="font-black text-xs uppercase tracking-tight">{method}</span>
-                            {payment === method && (
-                              <div className="flex-grow flex justify-end text-red-600">
-                                <Icons.CheckCircle />
-                              </div>
-                            )}
-                          </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

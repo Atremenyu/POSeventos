@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, Category, Order, Table } from '../types';
-import { Icons } from '../constants';
+import { Product, Category, Order, Table, User, RoleName, Shift } from '../types';
+import { Icons, ROLES } from '../constants';
 
 interface ProductManagementProps {
   products: Product[];
@@ -16,6 +16,9 @@ interface ProductManagementProps {
   eventType: string;
   onUpdateSettings: (name: string, type: string) => void;
   onRestoreDatabase: (data: any) => void;
+  users: User[];
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  shifts: Shift[];
 }
 
 interface BackupPreview {
@@ -23,10 +26,13 @@ interface BackupPreview {
   categories: Category[];
   tables: Table[];
   orders: Order[];
+  users: User[];
   restaurantName: string;
   eventType: string;
   fileName: string;
 }
+
+import ConfirmationModal from './ConfirmationModal';
 
 const ProductManagement: React.FC<ProductManagementProps> = ({ 
   products, 
@@ -40,12 +46,34 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   restaurantName,
   eventType,
   onUpdateSettings,
-  onRestoreDatabase
+  onRestoreDatabase,
+  users,
+  setUsers,
+  shifts
 }) => {
-  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'tables' | 'general'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts'>('products');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Confirmation state
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'danger' | 'warning';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'danger'
+  });
+
+  const triggerConfirm = (title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' = 'danger') => {
+    setConfirmState({ isOpen: true, title, message, onConfirm, type });
+  };
 
   // General Settings Form
   const [formRestName, setFormRestName] = useState(restaurantName);
@@ -71,6 +99,11 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   // Table Form State
   const [newTableName, setNewTableName] = useState('');
 
+  // User Form State
+  const [useFormName, setUserFormName] = useState('');
+  const [userFormPin, setUserFormPin] = useState('');
+  const [userFormRole, setUserFormRole] = useState<RoleName>('Caja');
+
   const handleSaveProduct = () => {
     if (!name || price <= 0 || !category) return;
 
@@ -92,6 +125,59 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     resetProductForm();
   };
 
+  const handleSaveUser = () => {
+    if (!useFormName || userFormPin.length !== 4 || !userFormRole) {
+      alert('Completa todos los campos correctamente. El PIN debe tener 4 dígitos.');
+      return;
+    }
+
+    if (editingId) {
+      setUsers(prev => prev.map(u => 
+        u.id === editingId ? { ...u, name: useFormName, pin: userFormPin, role: userFormRole } : u
+      ));
+      setEditingId(null);
+    } else {
+      const newUser: User = {
+        id: Date.now().toString(),
+        name: useFormName,
+        pin: userFormPin,
+        role: userFormRole,
+      };
+      setUsers(prev => [...prev, newUser]);
+      setIsAdding(false);
+    }
+    resetUserForm();
+  };
+
+  const resetUserForm = () => {
+    setUserFormName('');
+    setUserFormPin('');
+    setUserFormRole('Caja');
+  };
+
+  const startEditUser = (u: User) => {
+    setEditingId(u.id);
+    setUserFormName(u.name);
+    setUserFormPin(u.pin);
+    setUserFormRole(u.role);
+    setIsAdding(false);
+  };
+
+  const deleteUser = (id: string) => {
+    if (id === 'admin') {
+      alert('No se puede eliminar el usuario administrador principal.');
+      return;
+    }
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    
+    triggerConfirm(
+      'Eliminar Usuario',
+      `¿Estás seguro de eliminar al usuario "${user.name}"?`,
+      () => setUsers(prev => prev.filter(u => u.id !== id))
+    );
+  };
+
   const resetProductForm = () => {
     setName('');
     setPrice(0);
@@ -107,9 +193,14 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const deleteProduct = (id: string) => {
-    if (confirm('¿Estás seguro de eliminar este producto?')) {
-      setProducts(prev => prev.filter(p => p.id !== id));
-    }
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    
+    triggerConfirm(
+      'Eliminar Producto',
+      `¿Estás seguro de eliminar "${product.name}"? Esta acción no se puede deshacer.`,
+      () => setProducts(prev => prev.filter(p => p.id !== id))
+    );
   };
 
   const handleAddCategory = () => {
@@ -129,9 +220,12 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       alert(`No se puede eliminar "${cat}" porque está siendo usada por algunos productos.`);
       return;
     }
-    if (confirm(`¿Eliminar categoría "${cat}"?`)) {
-      setCategories(prev => prev.filter(c => c !== cat));
-    }
+    
+    triggerConfirm(
+      'Eliminar Categoría',
+      `¿Eliminar categoría "${cat}"? Se quitará de la lista de filtros.`,
+      () => setCategories(prev => prev.filter(c => c !== cat))
+    );
   };
 
   const handleAddTable = () => {
@@ -161,9 +255,11 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       return;
     }
 
-    if (confirm(`¿Eliminar mesa "${table.name}"?`)) {
-      setTables(prev => prev.filter(t => t.id !== id));
-    }
+    triggerConfirm(
+      'Eliminar Mesa',
+      `¿Eliminar mesa "${table.name}"? Los registros históricos se preservarán, pero no podrá abrir nuevas órdenes aquí.`,
+      () => setTables(prev => prev.filter(t => t.id !== id))
+    );
   };
 
   const handleSaveGeneral = () => {
@@ -178,6 +274,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       categories,
       tables,
       orders,
+      users,
       restaurantName,
       eventType,
       exportDate: new Date().toISOString()
@@ -213,6 +310,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           categories: data.categories || [],
           tables: data.tables || [],
           orders: data.orders || [],
+          users: data.users || [],
           restaurantName: data.restaurantName || restaurantName,
           eventType: data.eventType || eventType,
           fileName: file.name
@@ -230,18 +328,22 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const applyBackup = () => {
     if (!preview) return;
 
-    if (confirm('ATENCIÓN: Se borrarán todos los datos actuales y se reemplazarán por los del respaldo. ¿Continuar?')) {
-      try {
-        onRestoreDatabase(preview);
-        alert('Base de datos restaurada con éxito.');
-        setPreview(null);
-        // Opcional: Volver a la pestaña de productos para ver el cambio
-        setActiveTab('products');
-      } catch (error) {
-        console.error("Error durante applyBackup:", error);
-        alert("Ocurrió un error al aplicar el respaldo.");
-      }
-    }
+    triggerConfirm(
+      'Restaurar Respaldo',
+      'ATENCIÓN: Se borrarán todos los datos actuales y se reemplazarán por los del respaldo. Esta acción es irreversible.',
+      () => {
+        try {
+          onRestoreDatabase(preview);
+          alert('Base de datos restaurada con éxito.');
+          setPreview(null);
+          setActiveTab('products');
+        } catch (error) {
+          console.error("Error durante applyBackup:", error);
+          alert("Ocurrió un error al aplicar el respaldo.");
+        }
+      },
+      'warning'
+    );
   };
 
   return (
@@ -270,6 +372,18 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'general' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
         >
           General
+        </button>
+        <button 
+          onClick={() => setActiveTab('users')}
+          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'users' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
+        >
+          Usuarios
+        </button>
+        <button 
+          onClick={() => setActiveTab('shifts')}
+          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'shifts' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
+        >
+          Turnos
         </button>
       </div>
 
@@ -447,6 +561,167 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
         </div>
       )}
 
+      {activeTab === 'users' && (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Gestión de Usuarios</h2>
+            {!isAdding && !editingId && (
+              <button 
+                onClick={() => setIsAdding(true)}
+                className="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-red-700 transition shadow-lg shadow-red-100"
+              >
+                <Icons.Plus /> <span>Nuevo Usuario</span>
+              </button>
+            )}
+          </div>
+
+          {(isAdding || editingId) && (
+            <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
+              <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Usuario</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre Completo</label>
+                  <input 
+                    type="text" value={useFormName} onChange={e => setUserFormName(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                    placeholder="Ej. Juan Pérez"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PIN (4 dígitos)</label>
+                  <input 
+                    type="password" maxLength={4} value={userFormPin} onChange={e => setUserFormPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                    placeholder="****"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol / Permisos</label>
+                  <select 
+                    value={userFormRole} onChange={e => setUserFormRole(e.target.value as RoleName)}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                  >
+                    {ROLES.map(role => (
+                      <option key={role.name} value={role.name}>{role.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-8 flex justify-end space-x-3">
+                <button 
+                  onClick={() => { setIsAdding(false); setEditingId(null); resetUserForm(); }}
+                  className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveUser}
+                  className="px-10 py-2 bg-black text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg"
+                >
+                  Guardar Usuario
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+            <table className="w-full text-left min-w-[500px] md:min-w-0">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">PIN</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-red-50/30 transition-colors">
+                    <td className="px-6 py-4 font-bold text-slate-900">{user.name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase ${
+                        user.role === 'Admin' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-300'
+                      }`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-slate-400">****</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end space-x-1">
+                        <button onClick={() => startEditUser(user)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"><Icons.Edit /></button>
+                        <button 
+                          onClick={() => deleteUser(user.id)} 
+                          className={`p-2 transition rounded-lg ${user.id === 'admin' ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-black hover:bg-slate-100'}`}
+                          disabled={user.id === 'admin'}
+                        >
+                          <Icons.Trash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'shifts' && (
+        <>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Historial de Turnos</h2>
+            <div className="bg-slate-100 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              {shifts.length} Registros
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuario</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Salida</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Duración</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {shifts.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-slate-400 uppercase text-xs font-black tracking-widest">No hay turnos registrados</td>
+                  </tr>
+                ) : (
+                  shifts.map(shift => {
+                    const start = new Date(shift.startTime);
+                    const end = shift.endTime ? new Date(shift.endTime) : null;
+                    const duration = end ? Math.round((end.getTime() - start.getTime()) / 60000) : null;
+
+                    return (
+                      <tr key={shift.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-900">{shift.userName}</td>
+                        <td className="px-6 py-4 text-xs">
+                          {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="px-6 py-4 text-xs">
+                          {end ? (
+                            `${end.toLocaleDateString()} ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                          ) : (
+                            <span className="text-green-500 font-black animate-pulse uppercase text-[10px]">En Turno</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                          {duration !== null ? `${Math.floor(duration/60)}h ${duration%60}m` : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       {activeTab === 'general' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-400 pb-10">
           <div className="space-y-6">
@@ -549,6 +824,10 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                       <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Órdenes</p>
                       <p className="text-lg font-black">{preview.orders.length}</p>
                     </div>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Usuarios</p>
+                      <p className="text-lg font-black">{preview.users.length}</p>
+                    </div>
                   </div>
 
                   <div className="p-4 bg-white rounded-xl border border-slate-200 mb-6">
@@ -579,6 +858,14 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           </div>
         </div>
       )}
+      <ConfirmationModal 
+        isOpen={confirmState.isOpen}
+        onClose={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmState.onConfirm}
+        title={confirmState.title}
+        message={confirmState.message}
+        type={confirmState.type as 'danger' | 'warning'}
+      />
     </div>
   );
 };

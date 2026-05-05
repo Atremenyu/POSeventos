@@ -12,11 +12,15 @@ interface HistoryViewProps {
   orders: Order[];
   tables: Table[];
   restaurantName?: string;
+  hasOpenCashShift?: boolean;
+  onCloseCashShift?: () => void;
 }
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#000000'];
 
-const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantName }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ 
+  orders, tables, restaurantName, hasOpenCashShift, onCloseCashShift 
+}) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
@@ -24,8 +28,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
   const paymentMethods = useMemo(() => {
     const methods = new Set<string>();
     orders.forEach(o => {
-      if (o.partialPayments && o.partialPayments.length > 0) {
-        o.partialPayments.forEach(p => methods.add(p.method));
+      if (o.payments && o.payments.length > 0) {
+        o.payments.forEach(p => methods.add(p.method));
       } else {
         methods.add(o.payment);
       }
@@ -38,28 +42,31 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
     
     // Revenue and Methods
     let totalRevenue = 0;
+    let totalTips = 0;
     const dailyMap = new Map<string, number>();
     const hourlyMap = new Map<number, number>();
     for (let i = 0; i < 24; i++) hourlyMap.set(i, 0);
     const methodsMap = new Map<string, number>();
 
     validOrders.forEach(o => {
-      if (o.partialPayments && o.partialPayments.length > 0) {
-        o.partialPayments.forEach(p => {
-          const day = new Date(p.date).toLocaleDateString();
-          const hour = new Date(p.date).getHours();
+      if (o.payments && o.payments.length > 0) {
+        o.payments.forEach(p => {
+          const day = new Date(p.timestamp).toLocaleDateString();
+          const hour = new Date(p.timestamp).getHours();
           const amount = p.amount;
 
           totalRevenue += amount;
+          totalTips += (p.tip || 0);
           dailyMap.set(day, (dailyMap.get(day) || 0) + amount);
           hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + amount);
           methodsMap.set(p.method, (methodsMap.get(p.method) || 0) + amount);
         });
       } else if (o.isPaid) {
-        // Fallback for orders without partialPayments array (older data or legacy)
+        // Fallback for legacy data
         const day = new Date(o.date).toLocaleDateString();
         const hour = new Date(o.date).getHours();
         totalRevenue += o.total;
+        totalTips += (o.tip || 0);
         dailyMap.set(day, (dailyMap.get(day) || 0) + o.total);
         hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + o.total);
         methodsMap.set(o.payment, (methodsMap.get(o.payment) || 0) + o.total);
@@ -99,7 +106,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
     const occupancyRate = tables.length > 0 ? (occupiedTables / tables.length) * 100 : 0;
 
     return { 
-      daily, products, hourly, methods, totalRevenue, orderCount, deliveredCount, 
+      daily, products, hourly, methods, totalRevenue, totalTips, orderCount, deliveredCount, 
       avgOrderValue, occupancyRate, occupiedTables 
     };
   }, [orders, tables]);
@@ -108,8 +115,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
     return orders
       .filter(o => {
         if (paymentFilter === 'all') return true;
-        if (o.partialPayments && o.partialPayments.length > 0) {
-          return o.partialPayments.some(p => p.method === paymentFilter);
+        if (o.payments && o.payments.length > 0) {
+          return o.payments.some(p => p.method === paymentFilter);
         }
         return o.payment === paymentFilter;
       })
@@ -194,23 +201,34 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
           </p>
         </div>
         
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-          <button 
-            onClick={() => setActiveTab('list')}
-            className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-              activeTab === 'list' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
-            }`}
-          >
-            Operaciones
-          </button>
-          <button 
-            onClick={() => setActiveTab('analytics')}
-            className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-              activeTab === 'analytics' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
-            }`}
-          >
-            Estadísticas
-          </button>
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          {hasOpenCashShift && (
+            <button 
+              onClick={onCloseCashShift}
+              className="px-8 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-red-200 flex items-center space-x-2"
+            >
+              <Icons.Lock size={16} />
+              <span>Realizar Corte</span>
+            </button>
+          )}
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <button 
+              onClick={() => setActiveTab('list')}
+              className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                activeTab === 'list' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
+              }`}
+            >
+              Operaciones
+            </button>
+            <button 
+              onClick={() => setActiveTab('analytics')}
+              className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                activeTab === 'analytics' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
+              }`}
+            >
+              Estadísticas
+            </button>
+          </div>
         </div>
       </div>
 
@@ -219,12 +237,13 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
         <KPIBox 
           label="Ventas Totales" 
           value={`$${analyticsData.totalRevenue.toLocaleString()}`} 
+          subValue={`+ $${analyticsData.totalTips.toLocaleString()} Propina`}
           icon={<Icons.Chart />} 
           color="black"
         />
         <KPIBox 
-          label="Promedio Venta" 
-          value={`$${Math.round(analyticsData.avgOrderValue).toLocaleString()}`} 
+          label="Caja Total" 
+          value={`$${(analyticsData.totalRevenue + analyticsData.totalTips).toLocaleString()}`} 
           icon={<Icons.DollarSign />} 
           color="red"
         />
@@ -533,21 +552,28 @@ const HistoryView: React.FC<HistoryViewProps> = ({ orders, tables, restaurantNam
                           </div>
                         ))}
 
-                        {order.partialPayments && order.partialPayments.length > 0 && (
+                        {order.payments && order.payments.length > 0 && (
                           <div className="mt-4 pt-4 border-t border-dashed border-slate-300">
-                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Desglose de Pagos</h4>
+                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Desglose de Pagos y Propinas</h4>
                              <div className="space-y-2">
-                               {order.partialPayments.map((p, i) => (
+                               {order.payments.map((p, i) => (
                                  <div key={i} className="flex justify-between items-center text-[10px] font-bold uppercase tracking-tight">
                                    <div className="flex items-center space-x-2">
-                                     <span className="text-slate-400">{new Date(p.date).toLocaleDateString()}</span>
+                                     <span className="text-slate-400">{new Date(p.timestamp).toLocaleDateString()}</span>
                                      <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                                      <span className="text-black">{p.method}</span>
+                                     {p.tip > 0 && <span className="bg-blue-50 text-blue-600 px-1 rounded-sm">Propina: ${p.tip}</span>}
                                    </div>
                                    <span className="text-green-600">${p.amount.toLocaleString()}</span>
                                  </div>
                                ))}
                              </div>
+                             {order.tip > 0 && (
+                               <div className="mt-2 flex justify-between text-[10px] font-black border-t border-slate-100 pt-2 uppercase">
+                                 <span className="text-slate-500">Total Propina</span>
+                                 <span className="text-blue-600">${order.tip.toLocaleString()}</span>
+                               </div>
+                             )}
                           </div>
                         )}
                         <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end space-x-4">

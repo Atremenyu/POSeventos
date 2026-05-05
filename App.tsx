@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift } from './types';
+import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift, SelectedModifier, CashShift, UserRole, PaymentRecord } from './types';
 import { storage } from './services/storage';
 import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_TABLES, INITIAL_USERS, ROLES, Icons } from './constants';
 import POSView from './components/POSView';
@@ -12,6 +12,8 @@ import ProductManagement from './components/ProductManagement';
 import TabNavigation from './components/TabNavigation';
 import ActiveOrdersSlider from './components/ActiveOrdersSlider';
 import { LoginView } from './components/LoginView';
+import CashOpeningModal from './components/CashOpeningModal';
+import CashClosingModal from './components/CashClosingModal';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('pos');
@@ -22,6 +24,8 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [cashShifts, setCashShifts] = useState<CashShift[]>([]);
+  const [roles, setRoles] = useState<UserRole[]>(ROLES);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentShiftId, setCurrentShiftId] = useState<string | null>(null);
   
@@ -32,6 +36,8 @@ const App: React.FC = () => {
   const [activeNotification, setActiveNotification] = useState<{ id: string, message: string, type: 'ready' } | null>(null);
   const [showOrdersSlider, setShowOrdersSlider] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showOpeningModal, setShowOpeningModal] = useState(false);
+  const [showClosingModal, setShowClosingModal] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -41,15 +47,30 @@ const App: React.FC = () => {
     const savedOrders = storage.getOrders();
     const savedUsers = storage.getUsers();
     const savedShifts = storage.getShifts();
+    const savedCashShifts = storage.getCashShifts();
+    const savedRoles = storage.getRoles();
     const savedName = storage.getRestaurantName();
     const savedType = storage.getEventType();
 
     setProducts(savedProducts.length > 0 ? savedProducts : INITIAL_PRODUCTS);
     setCategories(savedCategories.length > 0 ? savedCategories : INITIAL_CATEGORIES);
     setTables(savedTables.length > 0 ? savedTables : INITIAL_TABLES);
-    setOrders(savedOrders);
+    const migratedOrders = savedOrders.map((o: any) => ({
+      ...o,
+      payments: o.payments || o.partialPayments?.map((p: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        amount: p.amount,
+        method: p.method,
+        tip: 0,
+        timestamp: p.date || o.date
+      })) || [],
+      tip: o.tip || 0
+    }));
+    setOrders(migratedOrders);
     setUsers(savedUsers.length > 0 ? savedUsers : INITIAL_USERS);
     setShifts(savedShifts);
+    setCashShifts(savedCashShifts);
+    setRoles(savedRoles.length > 0 ? savedRoles : ROLES);
     setRestaurantName(savedName);
     setEventType(savedType);
     setIsLoaded(true);
@@ -80,6 +101,14 @@ const App: React.FC = () => {
     if (isLoaded) storage.saveShifts(shifts);
   }, [shifts, isLoaded]);
 
+  useEffect(() => {
+    if (isLoaded) storage.saveCashShifts(cashShifts);
+  }, [cashShifts, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) storage.saveRoles(roles);
+  }, [roles, isLoaded]);
+
   const restoreDatabase = (data: any) => {
     // 1. Persistencia inmediata y forzada para evitar fallos de renderizado
     if (data.products) storage.saveProducts(data.products);
@@ -90,14 +119,29 @@ const App: React.FC = () => {
     if (data.eventType) storage.saveEventType(data.eventType);
     if (data.users) storage.saveUsers(data.users);
     if (data.shifts) storage.saveShifts(data.shifts);
+    if (data.cashShifts) storage.saveCashShifts(data.cashShifts);
+    if (data.roles) storage.saveRoles(data.roles);
 
     // 2. Actualización de estado de React para reflejar en UI
     setProducts(data.products || []);
     setCategories(data.categories || []);
     setTables(data.tables || []);
-    setOrders(data.orders || []);
+    const migratedOrders = (data.orders || []).map((o: any) => ({
+      ...o,
+      payments: o.payments || o.partialPayments?.map((p: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        amount: p.amount,
+        method: p.method,
+        tip: 0,
+        timestamp: p.date || o.date
+      })) || [],
+      tip: o.tip || 0
+    }));
+    setOrders(migratedOrders);
     setUsers(data.users || INITIAL_USERS);
     setShifts(data.shifts || []);
+    setCashShifts(data.cashShifts || []);
+    setRoles(data.roles || ROLES);
     setRestaurantName(data.restaurantName || 'Mi Restaurante');
     setEventType(data.eventType || 'Evento Gastronómico');
     
@@ -107,7 +151,7 @@ const App: React.FC = () => {
     console.log("Base de datos restaurada correctamente en el estado global.");
   };
 
-  const splitOrder = (orderId: string, splitQuantities: Record<number, number>, payment: PaymentMethod) => {
+  const splitOrder = (orderId: string, splitQuantities: Record<number, number>, payment: PaymentMethod, tip: number = 0) => {
     setOrders(prev => {
       const order = prev.find(o => o.id === orderId);
       if (!order) return prev;
@@ -121,13 +165,15 @@ const App: React.FC = () => {
         return { ...item, paidQuantity: newPaid };
       });
 
-      const newPartialPayment = {
+      const newPayment: PaymentRecord = {
+        id: Math.random().toString(36).substr(2, 9),
         method: payment,
         amount: currentPaidTotal,
-        date: new Date().toISOString()
+        tip: tip,
+        timestamp: new Date().toISOString()
       };
 
-      const partialPayments = [...(order.partialPayments || []), newPartialPayment];
+      const payments = [...(order.payments || []), newPayment];
       
       const allPaid = updatedItems.every(item => 
         (item.paidQuantity || 0) >= item.quantity
@@ -147,14 +193,15 @@ const App: React.FC = () => {
         isPaid: allPaid,
         payment: allPaid ? payment : o.payment,
         status: allPaid ? 'delivered' : o.status,
-        partialPayments
+        tip: (o.tip || 0) + tip,
+        payments
       } : o);
     });
   };
 
   const currentUserRole = useMemo(() => 
-    ROLES.find(r => r.name === currentUser?.role),
-  [currentUser]);
+    roles.find(r => r.name === currentUser?.role),
+  [currentUser, roles]);
 
   const canAccessView = (v: ViewState) => {
     if (!currentUserRole) return false;
@@ -175,7 +222,7 @@ const App: React.FC = () => {
     setCurrentShiftId(newShift.id);
 
     // Set first available view
-    const role = ROLES.find(r => r.name === user.role);
+    const role = roles.find(r => r.name === user.role);
     if (role && role.permissions.length > 0) {
       setView(role.permissions[0]);
     }
@@ -199,19 +246,99 @@ const App: React.FC = () => {
     setShowLogoutConfirm(false);
   };
 
+  const handleOpenCashShift = (initialFund: number) => {
+    if (!currentUser) return;
+    const newShift: CashShift = {
+      id: Date.now().toString(),
+      userId: currentUser.id,
+      userName: currentUser.name,
+      openingTime: new Date().toISOString(),
+      initialFund,
+      status: 'open'
+    };
+    setCashShifts(prev => [...prev, newShift]);
+    setView('pos');
+  };
+
+  const handleCloseCashShift = (actualAmount: number, notes?: string) => {
+    setCashShifts(prev => prev.map(s => {
+      if (s.status === 'open') {
+        const { expectedAmount } = getCashShiftStats(s);
+        
+        return {
+          ...s,
+          closingTime: new Date().toISOString(),
+          actualAmount,
+          expectedAmount,
+          difference: actualAmount - expectedAmount,
+          status: 'closed',
+          notes
+        };
+      }
+      return s;
+    }));
+    setShowClosingModal(false);
+  };
+
+  const getCashShiftStats = (shift: CashShift) => {
+    const shiftOrders = orders.filter(o => 
+      o.status === 'delivered' && 
+      o.isPaid && 
+      new Date(o.date) > new Date(shift.openingTime)
+    );
+    const salesTotal = shiftOrders.reduce((acc, o) => acc + o.total, 0);
+    const expectedAmount = shift.initialFund + salesTotal;
+    return { salesTotal, expectedAmount };
+  };
+
   const pendingCount = useMemo(() => 
     orders.filter(o => o.status === 'pending' || o.status === 'preparing').length, 
   [orders]);
 
-  const addToCart = (product: Product) => {
+  const hasOpenCashShift = useMemo(() => {
+    return cashShifts.some(s => s.status === 'open');
+  }, [cashShifts]);
+
+  const currentOpenCashShift = useMemo(() => {
+    return cashShifts.find(s => s.status === 'open');
+  }, [cashShifts]);
+
+  const addToCart = (product: Product, selectedModifiers?: SelectedModifier[], note?: string) => {
+    if (!hasOpenCashShift && (currentUser?.role === 'Admin' || currentUser?.role === 'Caja')) {
+      alert('Debes abrir la caja antes de tomar pedidos.');
+      // Switch view to cash audit if possible or show modal
+      setView('history'); // We'll assume history or a new view for cash audit
+      return;
+    }
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const modifierKey = selectedModifiers ? JSON.stringify(selectedModifiers) : '';
+      const existing = prev.find(item => 
+        item.id === product.id && 
+        JSON.stringify(item.selectedModifiers || []) === modifierKey &&
+        (item.note || '') === (note || '')
+      );
+
       if (existing) {
         return prev.map(item => 
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          (item.id === product.id && 
+           JSON.stringify(item.selectedModifiers || []) === modifierKey &&
+           (item.note || '') === (note || ''))
+          ? { ...item, quantity: item.quantity + 1 } 
+          : item
         );
       }
-      return [...prev, { ...product, quantity: 1, note: '' }];
+
+      // Calculate base price + modifiers
+      const extrasPrice = selectedModifiers?.reduce((acc, m) => acc + m.extraPrice, 0) || 0;
+      const finalPrice = product.price + extrasPrice;
+
+      return [...prev, { 
+        ...product, 
+        price: finalPrice, 
+        quantity: 1, 
+        note: note || '', 
+        selectedModifiers 
+      }];
     });
   };
 
@@ -277,6 +404,14 @@ const App: React.FC = () => {
     }
 
     const isPaidImmediately = type !== 'dine-in';
+    const newPayment: PaymentRecord[] = isPaidImmediately ? [{
+      id: Math.random().toString(36).substr(2, 9),
+      method: payment,
+      amount: total,
+      tip: 0,
+      timestamp: new Date().toISOString()
+    }] : [];
+
     const newOrder: Order = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
@@ -287,23 +422,27 @@ const App: React.FC = () => {
       type,
       takeawayType,
       total,
+      tip: 0,
       items: cart.map(item => ({ 
         ...item, 
         status: 'pending' as OrderStatus,
         paidQuantity: isPaidImmediately ? item.quantity : 0 
       })),
       isPaid: isPaidImmediately,
-      partialPayments: isPaidImmediately ? [{
-        method: payment,
-        amount: total,
-        date: new Date().toISOString()
-      }] : []
+      payments: newPayment
     };
 
     setOrders(prev => [newOrder, ...prev]);
     setCart([]);
     setSelectedTableId(null);
-    setView('dispatch'); 
+    
+    // Check if can access dispatch before redirecting, otherwise go to first allowed view
+    if (canAccessView('dispatch')) {
+      setView('dispatch');
+    } else {
+      const firstAllowed = currentUserRole?.permissions[0] || 'login';
+      setView(firstAllowed);
+    }
   };
 
   const updateItemStatus = (orderId: string, itemIdx: number, status: OrderStatus) => {
@@ -405,41 +544,60 @@ const App: React.FC = () => {
     }, 10000);
   };
 
-  const payOrder = (orderId: string, payment: PaymentMethod) => {
+  const recordPayment = (orderId: string, amount: number, method: PaymentMethod, tip: number = 0) => {
     const orderToPay = orders.find(o => o.id === orderId);
     if (!orderToPay) return;
 
-    if (orderToPay.type === 'dine-in' && orderToPay.table) {
-      const tableToFree = orderToPay.table;
-      setTables(prev => prev.map(t => 
-        t.name === tableToFree ? { ...t, isOccupied: false } : t
-      ));
-    }
-
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
-        const alreadyPaid = o.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0;
-        const remainingAmount = Math.max(0, o.total - alreadyPaid);
-        
-        const finalPartialPayment = {
-          method: payment,
-          amount: remainingAmount,
-          date: new Date().toISOString()
+        const newPayment: PaymentRecord = {
+          id: Math.random().toString(36).substr(2, 9),
+          amount,
+          method,
+          tip,
+          timestamp: new Date().toISOString()
         };
 
-        const updatedPartialPayments = [...(o.partialPayments || []), finalPartialPayment];
+        const updatedPayments = [...(o.payments || []), newPayment];
+        const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+        const allPaid = totalPaid >= o.total;
 
         return { 
           ...o, 
-          isPaid: true, 
-          payment, 
-          status: 'delivered',
-          partialPayments: updatedPartialPayments,
-          items: o.items.map(item => ({ ...item, paidQuantity: item.quantity }))
+          isPaid: allPaid, 
+          payment: allPaid ? method : o.payment, 
+          status: allPaid ? 'delivered' : o.status,
+          payments: updatedPayments,
+          tip: (o.tip || 0) + tip,
+          items: o.items.map(item => ({ 
+            ...item, 
+            paidQuantity: allPaid ? item.quantity : (item.paidQuantity || 0) + (item.quantity * (amount / o.total))
+          }))
         };
       }
       return o;
     }));
+
+    if (orderToPay.type === 'dine-in' && orderToPay.table) {
+      const updatedOrder = orders.find(o => o.id === orderId);
+      const updatedPayments = [...(orderToPay.payments || []), { amount }];
+      const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+      if (totalPaid >= orderToPay.total) {
+        setTables(prev => prev.map(t => 
+          t.name === orderToPay.table ? { ...t, isOccupied: false } : t
+        ));
+      }
+    }
+  };
+
+  const payOrder = (orderId: string, payment: PaymentMethod, tip: number = 0) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    const alreadyPaid = order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+    const remaining = Math.max(0, order.total - alreadyPaid);
+    
+    recordPayment(orderId, remaining, payment, tip);
   };
 
   const cancelOrder = (orderId: string) => {
@@ -525,7 +683,7 @@ const App: React.FC = () => {
 
       <main className="flex-grow overflow-auto pb-24 md:pb-0">
         <div className="h-full">
-          {view === 'pos' && (
+          {view === 'pos' && canAccessView('pos') && (
             <POSView 
               products={products}
               categories={categories}
@@ -533,6 +691,9 @@ const App: React.FC = () => {
               orders={orders}
               tables={tables}
               initialTableId={selectedTableId}
+              hasOpenCashShift={hasOpenCashShift}
+              onOpenShift={() => setShowOpeningModal(true)}
+              onCloseShift={() => setShowClosingModal(true)}
               onAddToCart={addToCart} 
               onUpdateQuantity={updateCartQuantity}
               onUpdateNote={updateCartNote}
@@ -544,7 +705,7 @@ const App: React.FC = () => {
               onToggleOrders={() => setShowOrdersSlider(true)}
             />
           )}
-          {view === 'dispatch' && (
+          {view === 'dispatch' && canAccessView('dispatch') && (
             <DispatchView 
               orders={orders} 
               tables={tables}
@@ -559,14 +720,16 @@ const App: React.FC = () => {
               restaurantName={restaurantName}
             />
           )}
-          {view === 'history' && (
+          {view === 'history' && canAccessView('history') && (
             <HistoryView 
               orders={orders} 
               tables={tables}
               restaurantName={restaurantName} 
+              hasOpenCashShift={hasOpenCashShift}
+              onCloseCashShift={() => setShowClosingModal(true)}
             />
           )}
-          {view === 'tables' && (
+          {view === 'tables' && canAccessView('tables') && (
             <TablesView 
               tables={tables} 
               orders={orders}
@@ -581,7 +744,7 @@ const App: React.FC = () => {
               restaurantName={restaurantName}
             />
           )}
-          {view === 'settings' && (
+          {view === 'settings' && canAccessView('settings') && (
             <ProductManagement 
               products={products} 
               setProducts={setProducts}
@@ -598,6 +761,8 @@ const App: React.FC = () => {
               users={users}
               setUsers={setUsers}
               shifts={shifts}
+              roles={roles}
+              setRoles={setRoles}
             />
           )}
         </div>
@@ -688,6 +853,26 @@ const App: React.FC = () => {
               </div>
             </motion.div>
           </div>
+        )}
+
+        {showOpeningModal && (
+          <CashOpeningModal 
+            onOpen={(fund) => {
+              handleOpenCashShift(fund);
+              setShowOpeningModal(false);
+            }}
+            onClose={() => setShowOpeningModal(false)}
+          />
+        )}
+
+        {showClosingModal && currentOpenCashShift && (
+          <CashClosingModal 
+            expectedAmount={getCashShiftStats(currentOpenCashShift).expectedAmount}
+            initialFund={currentOpenCashShift.initialFund}
+            salesTotal={getCashShiftStats(currentOpenCashShift).salesTotal}
+            onConfirm={handleCloseCashShift}
+            onClose={() => setShowClosingModal(false)}
+          />
         )}
       </AnimatePresence>
     </div>

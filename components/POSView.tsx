@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CartItem, Category, PaymentMethod, Order, OrderType, TakeawayType, Table } from '../types';
+import { Product, CartItem, Category, PaymentMethod, Order, OrderType, TakeawayType, Table, SelectedModifier } from '../types';
 import { Icons } from '../constants';
+import ModifierModal from './ModifierModal';
 
 interface POSViewProps {
   products: Product[];
@@ -11,21 +12,24 @@ interface POSViewProps {
   orders: Order[];
   tables: Table[];
   initialTableId?: string | null;
-  onAddToCart: (p: Product) => void;
+  onAddToCart: (p: Product, mods?: SelectedModifier[], note?: string) => void;
   onUpdateQuantity: (id: string, delta: number) => void;
   onUpdateNote: (id: string, note: string) => void;
-  onCheckout: (client: string, table: string, payment: PaymentMethod, type: OrderType, takeawayType?: TakeawayType) => void;
+  onCheckout: (client: string, table: string, payment: PaymentMethod, type: OrderType, takeawayType?: TakeawayType, tip?: number) => void;
   onDeliver: (id: string) => void;
   onUpdateItemStatus: (orderId: string, itemIdx: number, status: any) => void;
-  onPay: (id: string, payment: PaymentMethod) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
   onCancel: (id: string) => void;
   onToggleOrders: () => void;
+  hasOpenCashShift: boolean;
+  onOpenShift: () => void;
+  onCloseShift: () => void;
 }
 
 const POSView: React.FC<POSViewProps> = ({ 
   products, categories, cart, orders, tables, initialTableId,
   onAddToCart, onUpdateQuantity, onUpdateNote, onCheckout, onDeliver, onUpdateItemStatus, onPay, onCancel,
-  onToggleOrders
+  onToggleOrders, hasOpenCashShift, onOpenShift, onCloseShift
 }) => {
   const [activeCategory, setActiveCategory] = useState<Category | 'Todos'>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,9 +38,26 @@ const POSView: React.FC<POSViewProps> = ({
   const [payment, setPayment] = useState<PaymentMethod>('Efectivo');
   const [orderType, setOrderType] = useState<OrderType>('dine-in');
   const [takeawayType, setTakeawayType] = useState<TakeawayType>('local');
+  const [tipAmount, setTipAmount] = useState<string>('');
   const [showCheckout, setShowCheckout] = useState(false);
   const [cartExpanded, setCartExpanded] = useState(false);
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [pendingModifierProduct, setPendingModifierProduct] = useState<Product | null>(null);
+
+  const handleProductClick = (product: Product) => {
+    if (product.modifierGroups && product.modifierGroups.length > 0) {
+      setPendingModifierProduct(product);
+    } else {
+      onAddToCart(product);
+    }
+  };
+
+  const handleModifierConfirm = (selectedModifiers: SelectedModifier[], note: string) => {
+    if (pendingModifierProduct) {
+      onAddToCart(pendingModifierProduct, selectedModifiers, note);
+      setPendingModifierProduct(null);
+    }
+  };
 
   // Sync with initialTableId from TablesView
   useEffect(() => {
@@ -91,18 +112,21 @@ const POSView: React.FC<POSViewProps> = ({
 
   const handleCheckoutSubmit = () => {
     // Basic validation for cash payments in POSView
+    const tip = parseFloat(tipAmount) || 0;
     if (payment === 'Efectivo' && orderType === 'takeaway' && takeawayType !== 'uber' && takeawayType !== 'didi') {
       const received = parseFloat(cashReceived);
-      if (isNaN(received) || received < total) {
-        const diff = total - (isNaN(received) ? 0 : received);
-        alert(`Monto insuficiente. Faltan $${diff.toLocaleString()} para cubrir el total de $${total.toLocaleString()}`);
+      const required = total + tip;
+      if (isNaN(received) || received < required) {
+        const diff = required - (isNaN(received) ? 0 : received);
+        alert(`Monto insuficiente. Faltan $${diff.toLocaleString()} para cubrir el total + propina de $${required.toLocaleString()}`);
         return;
       }
     }
     
-    onCheckout(client, table, payment, orderType, orderType === 'takeaway' ? takeawayType : undefined);
+    onCheckout(client, table, payment, orderType, orderType === 'takeaway' ? takeawayType : undefined, tip);
     setClient('');
     setTable('');
+    setTipAmount('');
     setPayment('Efectivo');
     setOrderType('dine-in');
     setTakeawayType('local');
@@ -160,7 +184,7 @@ const POSView: React.FC<POSViewProps> = ({
             <button
               key={product.id}
               disabled={showCheckout}
-              onClick={() => onAddToCart(product)}
+              onClick={() => handleProductClick(product)}
               className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-red-600 transition-all text-left flex flex-col justify-between active:scale-95 group"
             >
               <div>
@@ -192,6 +216,26 @@ const POSView: React.FC<POSViewProps> = ({
           })()}
         `}
       >
+        {/* Blocking Overlay if no shift */}
+        {!hasOpenCashShift && (
+          <div className="absolute inset-0 z-[60] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
+            <div className="bg-red-600/20 p-6 rounded-full mb-6 border border-red-600/30">
+              <Icons.Lock size={48} className="text-red-500" />
+            </div>
+            <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 leading-tight">
+              Caja Cerrada
+            </h3>
+            <p className="text-slate-400 font-bold mb-8 max-w-xs uppercase text-xs tracking-widest leading-relaxed">
+              Debes realizar la apertura de caja para comenzar a tomar pedidos.
+            </p>
+            <button 
+              onClick={onOpenShift}
+              className="px-10 py-5 bg-red-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm hover:bg-red-700 transition-all shadow-2xl shadow-red-600/20 active:scale-95"
+            >
+              Realizar Apertura
+            </button>
+          </div>
+        )}
         {/* Mobile Handle */}
         <div 
           className="lg:hidden flex justify-center pt-2 pb-1 bg-white rounded-t-[2.5rem] cursor-pointer"
@@ -224,6 +268,18 @@ const POSView: React.FC<POSViewProps> = ({
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            {hasOpenCashShift && !showCheckout && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseShift();
+                }}
+                className="p-2 text-slate-400 hover:text-red-600 transition"
+                title="Cerrar Caja"
+              >
+                <Icons.Lock size={20} />
+              </button>
+            )}
             {!showCheckout && (
                <button 
                 onClick={(e) => {
@@ -534,14 +590,14 @@ const POSView: React.FC<POSViewProps> = ({
                                       <div className="text-right">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Cambio</p>
                                         <p className="text-2xl font-black text-green-600 tracking-tighter">
-                                          ${Math.max(0, parseFloat(cashReceived) - total).toLocaleString()}
+                                          ${Math.max(0, parseFloat(cashReceived) - (total + (parseFloat(tipAmount) || 0))).toLocaleString()}
                                         </p>
                                       </div>
                                     )}
                                   </div>
                                   
                                   <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-red-100">
-                                    {[500, 1000, 2000, 5000, 10000, 20000].map(amount => (
+                                    {[500, 1000, 2000, 5000].map(amount => (
                                       <button 
                                         key={amount}
                                         onClick={() => setCashReceived(amount.toString())}
@@ -557,6 +613,33 @@ const POSView: React.FC<POSViewProps> = ({
                           );
                         })}
                       </div>
+                      
+                      <div className="pt-4 border-t border-slate-100">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Propina (Opcional)</label>
+                        <div className="flex items-center space-x-2">
+                          <div className="relative flex-grow">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                            <input 
+                              type="number"
+                              value={tipAmount}
+                              onChange={e => setTipAmount(e.target.value)}
+                              className="w-full pl-8 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-red-600 outline-none font-bold text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-1">
+                            {[0.10, 0.15, 0.20].map(pct => (
+                              <button
+                                key={pct}
+                                onClick={() => setTipAmount((total * pct).toFixed(2))}
+                                className="px-3 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-[10px] font-black"
+                              >
+                                {pct * 100}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -566,7 +649,22 @@ const POSView: React.FC<POSViewProps> = ({
                       <span>{orderType === 'dine-in' ? 'Cuenta Mesa' : 'Total Caja'}</span>
                       <span>{cart.length} items</span>
                    </div>
-                   <div className="text-4xl font-black tracking-tighter border-b border-slate-800 pb-4">${total.toLocaleString()}</div>
+                    <div className="flex flex-col border-b border-slate-800 pb-4">
+                       <div className="flex justify-between items-center text-[10px] font-black opacity-60 uppercase mb-1">
+                          <span>{orderType === 'dine-in' ? 'Cuenta Mesa' : 'Items'}</span>
+                          <span>${total.toLocaleString()}</span>
+                       </div>
+                       {parseFloat(tipAmount) > 0 && (
+                         <div className="flex justify-between items-center text-[10px] font-black text-red-400 uppercase mb-2">
+                           <span>Propina</span>
+                           <span>+ ${parseFloat(tipAmount).toLocaleString()}</span>
+                         </div>
+                       )}
+                       <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total a Pagar</span>
+                          <div className="text-4xl font-black tracking-tighter">${(total + (parseFloat(tipAmount) || 0)).toLocaleString()}</div>
+                       </div>
+                    </div>
                    <button 
                     onClick={handleCheckoutSubmit}
                     disabled={orderType === 'dine-in' && !table.trim()}
@@ -586,13 +684,22 @@ const POSView: React.FC<POSViewProps> = ({
               /* Regular Cart List */
               <>
                     <div className="flex-grow overflow-y-auto p-4 space-y-4">
-                      {cart.map(item => (
-                        <div key={item.id} className="flex flex-col space-y-2 group border-b border-slate-200 pb-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-grow">
-                              <h4 className="font-bold text-sm text-slate-900 uppercase tracking-tight leading-none">{item.name}</h4>
-                              <p className="text-[10px] text-slate-500 font-bold mt-1">${item.price}</p>
-                            </div>
+                      {cart.map((item, idx) => (
+                          <div key={`${item.id}-${idx}`} className="flex flex-col space-y-2 group border-b border-slate-200 pb-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-grow">
+                                <h4 className="font-bold text-sm text-slate-900 uppercase tracking-tight leading-none">{item.name}</h4>
+                                {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {item.selectedModifiers.map((mod, midx) => (
+                                      <span key={midx} className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                        {mod.modifierName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="text-[10px] text-slate-500 font-bold mt-1">${item.price}</p>
+                              </div>
                             <div className="flex items-center space-x-2 bg-white rounded border border-slate-300 p-0.5">
                               <button 
                                 onClick={() => onUpdateQuantity(item.id, -1)}
@@ -640,6 +747,15 @@ const POSView: React.FC<POSViewProps> = ({
                   </>
                 )}
               </div>
+            )}
+
+            {/* Modifiers Modal */}
+            {pendingModifierProduct && (
+              <ModifierModal 
+                product={pendingModifierProduct}
+                onClose={() => setPendingModifierProduct(null)}
+                onConfirm={handleModifierConfirm}
+              />
             )}
           </div>
         </div>

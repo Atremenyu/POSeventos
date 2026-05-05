@@ -10,8 +10,8 @@ interface TablesViewProps {
   tables: Table[];
   orders: Order[];
   onSelectTable: (tableId: string) => void;
-  onPay: (id: string, payment: PaymentMethod) => void;
-  onSplitOrder: (id: string, splitQuantities: Record<number, number>, payment: PaymentMethod) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
+  onSplitOrder: (id: string, splitQuantities: Record<number, number>, payment: PaymentMethod, tip?: number) => void;
   onCancel: (id: string) => void;
   onDeliver: (id: string) => void;
   restaurantName: string;
@@ -28,6 +28,7 @@ const TablesView: React.FC<TablesViewProps> = ({
   const [isSplitMode, setIsSplitMode] = useState(false);
   const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [tipAmount, setTipAmount] = useState<string>('');
 
   // Confirmation state
   const [confirmState, setConfirmState] = useState<{
@@ -81,24 +82,29 @@ const TablesView: React.FC<TablesViewProps> = ({
 
   const splitTotal = managingOrder ? Object.entries(splitQuantities).reduce((acc, [idx, qty]) => {
     const item = managingOrder.items[Number(idx)];
-    return acc + (item.price * qty);
+    if (!item) return acc;
+    return acc + (item.price * (qty as number));
   }, 0) : 0;
 
-  const handleConfirmSplit = () => {
+  const handleConfirmSplit = (tip: number = 0) => {
     if (!managingOrder || !selectedPayment) return;
     
-    onSplitOrder(managingOrder.id, splitQuantities, selectedPayment);
+    onSplitOrder(managingOrder.id, splitQuantities, selectedPayment, tip);
     
     // Reset or close if finished
-    const totalSelectedQty = Object.values(splitQuantities).reduce((a, b) => a + b, 0);
+    const totalSelectedQty = Object.values(splitQuantities).reduce((a: number, b: number) => a + b, 0);
     const totalRemainingQty = managingOrder.items.reduce((acc, i) => acc + (i.quantity - (i.paidQuantity || 0)), 0);
     
     if (totalSelectedQty >= totalRemainingQty) {
       setManagingTableId(null);
+      setTipAmount('');
+      setCashReceived('');
     } else {
       setIsSplitMode(false);
       setSplitQuantities({});
       setSelectedPayment(null);
+      setTipAmount('');
+      setCashReceived('');
     }
   };
 
@@ -304,7 +310,9 @@ const TablesView: React.FC<TablesViewProps> = ({
                     {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(met => {
                       const isSelected = selectedPayment === met;
                       const isCash = met === 'Efectivo';
-                      const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                      const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                      const tip = parseFloat(tipAmount) || 0;
+                      const required = amountToPay + tip;
 
                       return (
                         <div key={met} className={isSelected && isCash ? 'col-span-3' : ''}>
@@ -353,7 +361,7 @@ const TablesView: React.FC<TablesViewProps> = ({
                                   <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Cambio</p>
                                     <p className="text-2xl font-black text-green-600 tracking-tighter">
-                                      ${Math.max(0, parseFloat(cashReceived) - amountToPay).toLocaleString()}
+                                      ${Math.max(0, parseFloat(cashReceived) - required).toLocaleString()}
                                     </p>
                                   </div>
                                 )}
@@ -377,23 +385,77 @@ const TablesView: React.FC<TablesViewProps> = ({
                     })}
                   </div>
 
+                  <div className="pt-4 border-t border-slate-100">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Propina (Opcional)</label>
+                    <div className="flex items-center space-x-2">
+                       <div className="relative flex-grow">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                        <input 
+                          type="number"
+                          value={tipAmount}
+                          onChange={e => setTipAmount(e.target.value)}
+                          className="w-full pl-8 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-red-600 outline-none font-bold text-sm"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[0.10, 0.15, 0.20].map(pct => {
+                          const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                          return (
+                            <button
+                              key={pct}
+                              onClick={() => setTipAmount((amountToPay * pct).toFixed(2))}
+                              className="px-3 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-[10px] font-black"
+                            >
+                              {pct * 100}%
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Total for Billing */}
+                  <div className="p-6 bg-black text-white rounded-2xl space-y-4 mb-4">
+                     <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Saldo Pendiente</span>
+                        <span className="text-xl font-black">${(isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0))).toLocaleString()}</span>
+                     </div>
+                     {parseFloat(tipAmount) > 0 && (
+                       <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-red-400">Propina Añadida</span>
+                          <span className="text-xl font-black text-red-400">+ ${parseFloat(tipAmount).toLocaleString()}</span>
+                       </div>
+                     )}
+                     <div className="flex justify-between items-center pt-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total a Cobrar</span>
+                        <span className="text-3xl font-black tracking-tighter">
+                          ${((isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0))) + (parseFloat(tipAmount) || 0)).toLocaleString()}
+                        </span>
+                     </div>
+                  </div>
+
                   <button 
                     onClick={() => {
                       if (selectedPayment) {
-                        const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                        const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                        const tip = parseFloat(tipAmount) || 0;
+                        const required = amountToPay + tip;
+
                         if (selectedPayment === 'Efectivo') {
                           const received = parseFloat(cashReceived);
-                          if (isNaN(received) || received < amountToPay) {
-                            alert(`El cliente debe entregar al menos $${amountToPay.toLocaleString()}`);
+                          if (isNaN(received) || received < required) {
+                            alert(`El cliente debe entregar al menos $${required.toLocaleString()} (Total + Propina)`);
                             return;
                           }
                         }
 
                         if (isSplitMode) {
-                          handleConfirmSplit();
+                          handleConfirmSplit(tip);
                         } else {
-                          onPay(managingOrder.id, selectedPayment);
+                          onPay(managingOrder.id, selectedPayment, tip);
                           setManagingTableId(null);
+                          setTipAmount('');
                         }
                       }
                     }}

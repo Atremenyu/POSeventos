@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, Category, Order, Table, User, RoleName, Shift } from '../types';
-import { Icons, ROLES } from '../constants';
+import { Product, Category, Order, Table, User, Shift, UserRole, ViewState } from '../types';
+import { Icons } from '../constants';
 
 interface ProductManagementProps {
   products: Product[];
@@ -19,6 +19,8 @@ interface ProductManagementProps {
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   shifts: Shift[];
+  roles: UserRole[];
+  setRoles: React.Dispatch<React.SetStateAction<UserRole[]>>;
 }
 
 interface BackupPreview {
@@ -49,9 +51,11 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   onRestoreDatabase,
   users,
   setUsers,
-  shifts
+  shifts,
+  roles,
+  setRoles
 }) => {
-  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts' | 'roles'>('products');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,7 +106,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   // User Form State
   const [useFormName, setUserFormName] = useState('');
   const [userFormPin, setUserFormPin] = useState('');
-  const [userFormRole, setUserFormRole] = useState<RoleName>('Caja');
+  const [userFormRole, setUserFormRole] = useState<string>('Caja');
 
   const handleSaveProduct = () => {
     if (!name || price <= 0 || !category) return;
@@ -183,6 +187,58 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     setPrice(0);
     setCategory(categories[0] || '');
   };
+
+  // Role Management State
+  const [roleFormName, setRoleFormName] = useState('');
+  const [roleFormPermissions, setRoleFormPermissions] = useState<ViewState[]>([]);
+
+  const handleSaveRole = () => {
+    if (!roleFormName) return;
+    
+    if (editingId) {
+      setRoles(prev => prev.map(r => r.name === editingId ? { name: roleFormName, permissions: roleFormPermissions } : r));
+      setEditingId(null);
+    } else {
+      if (roles.some(r => r.name === roleFormName)) {
+        alert('Este rol ya existe.');
+        return;
+      }
+      setRoles(prev => [...prev, { name: roleFormName, permissions: roleFormPermissions }]);
+      setIsAdding(false);
+    }
+    setRoleFormName('');
+    setRoleFormPermissions([]);
+  };
+
+  const deleteRole = (name: string) => {
+    if (name === 'Admin') {
+      alert('No se puede eliminar el rol de Administrador.');
+      return;
+    }
+    if (users.some(u => u.role === name)) {
+      alert('No se puede eliminar un rol asignado a usuarios.');
+      return;
+    }
+    triggerConfirm(
+      'Eliminar Rol',
+      `¿Deseas eliminar el rol "${name}"?`,
+      () => setRoles(prev => prev.filter(r => r.name !== name))
+    );
+  };
+
+  const togglePermission = (view: ViewState) => {
+    setRoleFormPermissions(prev => 
+      prev.includes(view) ? prev.filter(v => v !== view) : [...prev, view]
+    );
+  };
+
+  const availableViews: {id: ViewState, label: string}[] = [
+    { id: 'pos', label: 'Venta (POS)' },
+    { id: 'tables', label: 'Mesas' },
+    { id: 'dispatch', label: 'Cocina (Dispatch)' },
+    { id: 'history', label: 'Administración' },
+    { id: 'settings', label: 'Configuración' },
+  ];
 
   const startEditProduct = (p: Product) => {
     setEditingId(p.id);
@@ -384,6 +440,12 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'shifts' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
         >
           Turnos
+        </button>
+        <button 
+          onClick={() => setActiveTab('roles')}
+          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'roles' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
+        >
+          Roles
         </button>
       </div>
 
@@ -598,10 +660,10 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol / Permisos</label>
                   <select 
-                    value={userFormRole} onChange={e => setUserFormRole(e.target.value as RoleName)}
+                    value={userFormRole} onChange={e => setUserFormRole(e.target.value)}
                     className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
                   >
-                    {ROLES.map(role => (
+                    {roles.map(role => (
                       <option key={role.name} value={role.name}>{role.name}</option>
                     ))}
                   </select>
@@ -722,6 +784,124 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
         </>
       )}
 
+      {activeTab === 'roles' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Configuración de Roles</h2>
+            {!isAdding && !editingId && (
+              <button 
+                onClick={() => {
+                  setIsAdding(true);
+                  setRoleFormName('');
+                  setRoleFormPermissions([]);
+                }}
+                className="bg-black text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-slate-800 transition shadow-lg"
+              >
+                <Icons.Plus /> <span>Nuevo Rol</span>
+              </button>
+            )}
+          </div>
+
+          {(isAdding || editingId) && (
+            <div className="bg-white p-8 rounded-3xl border-2 border-black shadow-2xl space-y-6 animate-in zoom-in duration-200">
+              <h3 className="text-lg font-black uppercase tracking-widest">{editingId ? 'Editar' : 'Crear'} Rol</h3>
+              
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Rol</label>
+                <input 
+                  type="text"
+                  value={roleFormName}
+                  onChange={e => setRoleFormName(e.target.value)}
+                  className="w-full p-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold"
+                  placeholder="Ej. Supervisor de Barra"
+                />
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Permisos de Visualización</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availableViews.map(view => (
+                    <button
+                      key={view.id}
+                      type="button"
+                      onClick={() => togglePermission(view.id)}
+                      className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                        roleFormPermissions.includes(view.id)
+                          ? 'border-red-600 bg-red-50 text-red-900 shadow-md'
+                          : 'border-slate-100 bg-slate-50 text-slate-400 opacity-60'
+                      }`}
+                    >
+                      <span className="font-black text-[10px] uppercase tracking-widest">{view.label}</span>
+                      {roleFormPermissions.includes(view.id) ? (
+                        <Icons.CheckCircle size={20} className="text-red-600" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border-2 border-slate-200" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6 border-t">
+                <button 
+                  onClick={() => { setIsAdding(false); setEditingId(null); }}
+                  className="px-6 py-3 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveRole}
+                  className="px-10 py-3 bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 shadow-xl transition-all"
+                >
+                  Guardar Permisos
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {roles.map(role => (
+              <div key={role.name} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between group transition-all hover:border-black">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{role.name}</h4>
+                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => {
+                          setEditingId(role.name);
+                          setRoleFormName(role.name);
+                          setRoleFormPermissions(role.permissions);
+                          setIsAdding(false);
+                        }}
+                        className="p-2 text-slate-400 hover:text-black hover:bg-slate-100 rounded-xl"
+                      >
+                        <Icons.Edit />
+                      </button>
+                      <button 
+                        onClick={() => deleteRole(role.name)}
+                        className={`p-2 rounded-xl transition ${role.name === 'Admin' ? 'text-slate-100 cursor-not-allowed' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}
+                        disabled={role.name === 'Admin'}
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {role.permissions.map(p => (
+                      <span key={p} className="px-2 py-1 bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest rounded-lg border border-slate-200">
+                        {availableViews.find(v => v.id === p)?.label || p}
+                      </span>
+                    ))}
+                    {role.permissions.length === 0 && (
+                      <span className="text-[10px] font-bold text-slate-300 italic">Sin accesos</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {activeTab === 'general' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-400 pb-10">
           <div className="space-y-6">

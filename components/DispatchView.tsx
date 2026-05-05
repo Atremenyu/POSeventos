@@ -10,7 +10,7 @@ interface DispatchViewProps {
   orders: Order[];
   tables: Table[];
   onDeliver: (id: string) => void;
-  onPay: (id: string, payment: PaymentMethod) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
   onCancel: (id: string) => void;
   onTransfer: (id: string, newTable: string) => void;
   onStartPreparing: (id: string, mins: number) => void;
@@ -25,6 +25,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({
 }) => {
   const [selectedPayment, setSelectedPayment] = useState<Record<string, PaymentMethod>>({});
   const [cashReceived, setCashReceived] = useState<Record<string, string>>({});
+  const [tipAmounts, setTipAmounts] = useState<Record<string, string>>({});
   const [transferingId, setTransferingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -214,11 +215,31 @@ const DispatchView: React.FC<DispatchViewProps> = ({
                       </span>
                     )}
                   </div>
+                  
+                  {/* Modifiers display */}
+                  {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {item.selectedModifiers.map((mod, midx) => (
+                        <span key={midx} className={`text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-tighter ${
+                          isPreparing ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          + {mod.modifierName}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {item.note && (
-                    <div className={`mt-1 p-2 rounded-xl border-l-2 ${
-                      itemIsDelivered ? 'bg-slate-50 border-slate-200' : (isPreparing ? 'text-amber-800 bg-amber-50 border-amber-500' : 'text-slate-400 bg-slate-50 border-slate-200')
+                    <div className={`mt-2 p-2 rounded-xl border-l-4 ${
+                      itemIsDelivered 
+                        ? 'bg-slate-50 border-slate-200 text-slate-400' 
+                        : (isPreparing 
+                            ? 'text-red-700 bg-red-50 border-red-500 shadow-sm animate-pulse' 
+                            : 'text-slate-600 bg-slate-50 border-slate-300')
                     }`}>
-                      <p className="text-[8px] italic font-bold leading-tight">{item.note}</p>
+                      <p className="text-[9px] font-black leading-tight uppercase tracking-tight">
+                        📢 {item.note}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -275,17 +296,19 @@ const DispatchView: React.FC<DispatchViewProps> = ({
              <div className="space-y-3 pt-3 border-t border-slate-100">
                 <div className="flex justify-between items-center px-1">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                    {order.partialPayments && order.partialPayments.length > 0 ? 'Resta:' : 'Total:'}
+                    {order.payments && order.payments.length > 0 ? 'Resta:' : 'Total:'}
                   </span>
                   <span className="text-lg font-black text-black tracking-tighter">
-                    ${(order.total - (order.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0)).toLocaleString()}
+                    ${(order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0)).toLocaleString()}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                    {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(met => {
                      const isSelected = selectedPayment[order.id] === met;
                      const isCash = met === 'Efectivo';
-                     const amountToPay = order.total - (order.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                     const amountToPay = order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                     const tip = parseFloat(tipAmounts[order.id]) || 0;
+                     const required = amountToPay + tip;
 
                      return (
                        <div key={met} className={isSelected && isCash ? 'col-span-3' : ''}>
@@ -334,7 +357,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({
                                  <div className="text-right">
                                    <p className="text-[7px] font-black uppercase tracking-widest text-green-600">Cambio</p>
                                    <p className="text-sm font-black text-green-600 tracking-tighter">
-                                     ${Math.max(0, parseFloat(cashReceived[order.id]) - amountToPay).toLocaleString()}
+                                     ${Math.max(0, parseFloat(cashReceived[order.id]) - required).toLocaleString()}
                                    </p>
                                  </div>
                                )}
@@ -358,19 +381,77 @@ const DispatchView: React.FC<DispatchViewProps> = ({
                    })}
                 </div>
 
+                <div className="pt-3 border-t border-slate-100">
+                  <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Propina (Opcional)</label>
+                  <div className="flex items-center space-x-1.5">
+                    <div className="relative flex-grow">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-[10px]">$</span>
+                      <input 
+                        type="number"
+                        value={tipAmounts[order.id] || ''}
+                        onChange={e => setTipAmounts(prev => ({ ...prev, [order.id]: e.target.value }))}
+                        className="w-full pl-6 pr-2 py-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-[10px]"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-0.5">
+                      {[0.10, 0.15, 0.20].map(pct => {
+                        const amountToPay = order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                        return (
+                          <button
+                            key={pct}
+                            onClick={() => setTipAmounts(prev => ({ ...prev, [order.id]: (amountToPay * pct).toFixed(2) }))}
+                            className="px-2 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-[8px] font-black"
+                          >
+                            {pct * 100}%
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary Total for Billing */}
+                <div className="p-4 bg-black text-white rounded-xl space-y-2 mb-2">
+                   <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                      <span className="text-[7px] font-black uppercase tracking-widest opacity-60">Subtotal</span>
+                      <span className="text-[10px] font-black">${(order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0)).toLocaleString()}</span>
+                   </div>
+                   {parseFloat(tipAmounts[order.id]) > 0 && (
+                     <div className="flex justify-between items-center border-b border-white/10 pb-2 text-red-400">
+                        <span className="text-[7px] font-black uppercase tracking-widest">Propina</span>
+                        <span className="text-[10px] font-black">+ ${parseFloat(tipAmounts[order.id]).toLocaleString()}</span>
+                     </div>
+                   )}
+                   <div className="flex justify-between items-center pt-1">
+                      <span className="text-[7px] font-black uppercase tracking-widest opacity-60">Total a Cobrar</span>
+                      <span className="text-xl font-black tracking-tighter">
+                        ${((order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0)) + (parseFloat(tipAmounts[order.id]) || 0)).toLocaleString()}
+                      </span>
+                   </div>
+                </div>
+
                 <button 
                   onClick={() => {
                     const meth = selectedPayment[order.id];
                     if (meth) {
-                      const amountToPay = order.total - (order.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                      const amountToPay = order.total - (order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                      const tip = parseFloat(tipAmounts[order.id]) || 0;
+                      const required = amountToPay + tip;
+                      
                       if (meth === 'Efectivo') {
                         const received = parseFloat(cashReceived[order.id]);
-                        if (isNaN(received) || received < amountToPay) {
-                          alert(`El cliente debe entregar al menos $${amountToPay.toLocaleString()}`);
+                        if (isNaN(received) || received < required) {
+                          alert(`El cliente debe entregar al menos $${required.toLocaleString()} (Total + Propina)`);
                           return;
                         }
                       }
-                      onPay(order.id, meth);
+                      onPay(order.id, meth, tip);
+                      setTipAmounts(prev => {
+                        const next = { ...prev };
+                        delete next[order.id];
+                        return next;
+                      });
                     }
                   }}
                   disabled={!selectedPayment[order.id]}

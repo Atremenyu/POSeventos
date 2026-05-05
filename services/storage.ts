@@ -1,5 +1,5 @@
 
-import { Product, Order, Category, Table, User, Shift } from '../types';
+import { Product, Order, Category, Table, User, Shift, CashShift, UserRole } from '../types';
 
 const KEYS = {
   PRODUCTS: 'comanda_productos',
@@ -10,9 +10,18 @@ const KEYS = {
   EVENT_TYPE: 'comanda_event_type',
   USERS: 'comanda_usuarios',
   SHIFTS: 'comanda_turnos',
+  CASH_SHIFTS: 'comanda_turnos_caja',
+  ROLES: 'comanda_roles',
 };
 
 export const storage = {
+  getRoles: (): UserRole[] => {
+    const data = localStorage.getItem(KEYS.ROLES);
+    return data ? JSON.parse(data) : [];
+  },
+  saveRoles: (roles: UserRole[]) => {
+    localStorage.setItem(KEYS.ROLES, JSON.stringify(roles));
+  },
   getProducts: (): Product[] => {
     const data = localStorage.getItem(KEYS.PRODUCTS);
     return data ? JSON.parse(data) : [];
@@ -54,6 +63,13 @@ export const storage = {
   },
   saveShifts: (shifts: Shift[]) => {
     localStorage.setItem(KEYS.SHIFTS, JSON.stringify(shifts));
+  },
+  getCashShifts: (): CashShift[] => {
+    const data = localStorage.getItem(KEYS.CASH_SHIFTS);
+    return data ? JSON.parse(data) : [];
+  },
+  saveCashShifts: (shifts: CashShift[]) => {
+    localStorage.setItem(KEYS.CASH_SHIFTS, JSON.stringify(shifts));
   },
   getRestaurantName: (): string => {
     return localStorage.getItem(KEYS.RESTAURANT_NAME) || 'Mi Restaurante';

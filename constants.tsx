@@ -19,7 +19,51 @@ export const INITIAL_USERS: User[] = [
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [
-  { id: '1', name: 'Hamburguesa Clásica', price: 850, category: 'Comida' },
+  { 
+    id: '1', 
+    name: 'Hamburguesa Clásica', 
+    price: 850, 
+    category: 'Comida',
+    modifierGroups: [
+      {
+        id: 'mg1',
+        name: 'Término de la Carne',
+        minSelection: 1,
+        maxSelection: 1,
+        isRequired: true,
+        modifiers: [
+          { id: 'm1', name: 'Término 1/2', extraPrice: 0 },
+          { id: 'm2', name: 'Término 3/4', extraPrice: 0 },
+          { id: 'm3', name: 'Bien Cocida', extraPrice: 0 },
+        ]
+      },
+      {
+        id: 'mg2',
+        name: 'Ingredientes Extra',
+        minSelection: 0,
+        maxSelection: 5,
+        isRequired: false,
+        modifiers: [
+          { id: 'm4', name: 'Extra Queso', extraPrice: 50 },
+          { id: 'm5', name: 'Extra Tocino', extraPrice: 120 },
+          { id: 'm6', name: 'Huevo Estrellado', extraPrice: 80 },
+          { id: 'm7', name: 'Aguacate', extraPrice: 100 },
+        ]
+      },
+      {
+        id: 'mg3',
+        name: 'Remover Ingredientes',
+        minSelection: 0,
+        maxSelection: 10,
+        isRequired: false,
+        modifiers: [
+          { id: 'm8', name: 'Sin Cebolla', extraPrice: 0 },
+          { id: 'm9', name: 'Sin Tomate', extraPrice: 0 },
+          { id: 'm10', name: 'Sin Pepinillos', extraPrice: 0 },
+        ]
+      }
+    ]
+  },
   { id: '2', name: 'Papas Fritas XL', price: 450, category: 'Comida' },
   { id: '3', name: 'Hot Dog Especial', price: 600, category: 'Comida' },
   { id: '4', name: 'Coca Cola 500ml', price: 300, category: 'Bebida' },
@@ -98,6 +142,12 @@ export const Icons = {
   ),
   Smartphone: (props: any) => (
     <svg xmlns="http://www.w3.org/2000/svg" width={props?.size || "24"} height={props?.size || "24"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+  ),
+  Lock: (props: any) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || "24"} height={props.size || "24"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  ),
+  AlertCircle: (props: any) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={props?.size || "24"} height={props?.size || "24"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
   ),
   ArrowLeft: (props: any) => (
     <svg xmlns="http://www.w3.org/2000/svg" width={props?.size || "24"} height={props?.size || "24"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>

@@ -1,11 +1,33 @@
 
 export type Category = string;
 
+export interface Modifier {
+  id: string;
+  name: string;
+  extraPrice: number;
+}
+
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  minSelection: number;
+  maxSelection: number;
+  isRequired: boolean;
+  modifiers: Modifier[];
+}
+
 export interface Product {
   id: string;
   name: string;
   price: number;
   category: Category;
+  modifierGroups?: ModifierGroup[];
+}
+
+export interface SelectedModifier {
+  modifierId: string;
+  modifierName: string;
+  extraPrice: number;
 }
 
 export interface CartItem extends Product {
@@ -13,6 +35,7 @@ export interface CartItem extends Product {
   paidQuantity?: number;
   note?: string;
   status?: OrderStatus;
+  selectedModifiers?: SelectedModifier[];
 }
 
 export type PaymentMethod = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Pendiente' | 'Uber' | 'Didi';
@@ -26,6 +49,14 @@ export interface PartialPayment {
   date: string;
 }
 
+export interface PaymentRecord {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  tip: number;
+  timestamp: string;
+}
+
 export interface Order {
   id: string;
   date: string;
@@ -36,9 +67,10 @@ export interface Order {
   type: OrderType;
   takeawayType?: TakeawayType;
   total: number;
+  tip: number;
   items: CartItem[];
   isPaid: boolean;
-  partialPayments?: PartialPayment[];
+  payments: PaymentRecord[];
   estimatedMinutes?: number;
   preparingAt?: string;
   readyAt?: string;
@@ -52,12 +84,24 @@ export interface Shift {
   endTime?: string;
 }
 
-export type ViewState = 'pos' | 'dispatch' | 'history' | 'settings' | 'tables' | 'login';
+export interface CashShift {
+  id: string;
+  userId: string;
+  userName: string;
+  openingTime: string;
+  closingTime?: string;
+  initialFund: number;
+  expectedAmount?: number;
+  actualAmount?: number;
+  difference?: number;
+  status: 'open' | 'closed';
+  notes?: string;
+}
 
-export type RoleName = 'Admin' | 'Cocinero' | 'Mesero' | 'Caja';
+export type ViewState = 'pos' | 'dispatch' | 'history' | 'settings' | 'tables' | 'login' | 'cash_audit';
 
 export interface UserRole {
-  name: RoleName;
+  name: string;
   permissions: ViewState[];
 }
 
@@ -65,7 +109,7 @@ export interface User {
   id: string;
   name: string;
   pin: string;
-  role: RoleName;
+  role: string;
 }
 
 export interface Table {

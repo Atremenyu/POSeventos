@@ -22,6 +22,14 @@ export interface Product {
   price: number;
   category: Category;
   modifierGroups?: ModifierGroup[];
+  hasCombo?: boolean;
+  comboOptions?: ComboOption[];
+}
+
+export interface ComboOption {
+  id: string;
+  label: string;
+  extraPrice: number;
 }
 
 export interface SelectedModifier {
@@ -36,6 +44,8 @@ export interface CartItem extends Product {
   note?: string;
   status?: OrderStatus;
   selectedModifiers?: SelectedModifier[];
+  isCombo?: boolean;
+  selectedComboOptions?: ComboOption[];
 }
 
 export type PaymentMethod = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Pendiente' | 'Uber' | 'Didi';

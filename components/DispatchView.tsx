@@ -193,10 +193,10 @@ const DispatchView: React.FC<DispatchViewProps> = ({
             const itemIsDelivered = item.status === 'delivered';
 
             return (
-              <div 
-                key={idx} 
-                className={`flex items-start space-x-3 transition-all p-1 -mx-1 rounded-xl hover:bg-slate-50 group/item ${itemIsDelivered ? 'opacity-40 grayscale-[0.5]' : ''}`}
-              >
+              <React.Fragment key={idx}>
+                <div 
+                  className={`flex items-start space-x-3 transition-all p-1 -mx-1 rounded-xl hover:bg-slate-50 group/item ${itemIsDelivered ? 'opacity-40 grayscale-[0.5]' : ''}`}
+                >
                 <span className={`w-6 h-6 flex-shrink-0 flex items-center justify-center font-black rounded-lg text-[10px] transition-colors ${
                   itemIsDelivered ? 'bg-slate-200 text-slate-400' : (isPreparing ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500')
                 }`}>
@@ -244,9 +244,48 @@ const DispatchView: React.FC<DispatchViewProps> = ({
                   )}
                 </div>
               </div>
-            );
-          })}
-        </div>
+              
+              {/* Simulated extra product row for Combo */}
+              {item.isCombo && (
+                <div className={`flex flex-col space-y-1 ml-9 mt-1 mb-2 ${itemIsDelivered ? 'opacity-40 grayscale-[0.5]' : ''}`}>
+                  {item.selectedComboOptions?.map((opt, oidx) => (
+                    <div key={`combo-${oidx}`} className="flex items-start space-x-3 transition-all p-1 -mx-1 rounded-xl">
+                      <span className={`w-5 h-5 flex-shrink-0 flex items-center justify-center font-black rounded-md text-[8px] transition-colors ${
+                        itemIsDelivered ? 'bg-slate-200 text-slate-400' : (isPreparing ? 'bg-red-500 text-white' : 'bg-red-100 text-red-500')
+                      }`}>
+                        {itemIsDelivered ? <Icons.Check /> : '+'}
+                      </span>
+                      <div className="flex-grow flex items-center pt-0.5">
+                        <span className={`font-black uppercase text-xs tracking-tight block ${
+                          itemIsDelivered ? 'text-slate-400 line-through' : (isPreparing ? 'text-red-700' : 'text-red-600')
+                        }`}>
+                          (COMBO) {opt.label}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {(!item.selectedComboOptions || item.selectedComboOptions.length === 0) && (
+                    <div className="flex items-start space-x-3 transition-all p-1 -mx-1 rounded-xl">
+                      <span className={`w-5 h-5 flex-shrink-0 flex items-center justify-center font-black rounded-md text-[8px] transition-colors ${
+                        itemIsDelivered ? 'bg-slate-200 text-slate-400' : (isPreparing ? 'bg-red-500 text-white' : 'bg-red-100 text-red-500')
+                      }`}>
+                        {itemIsDelivered ? <Icons.Check /> : '+'}
+                      </span>
+                      <div className="flex-grow flex items-center pt-0.5">
+                        <span className={`font-black uppercase text-xs tracking-tight block ${
+                          itemIsDelivered ? 'text-slate-400 line-through' : (isPreparing ? 'text-red-700' : 'text-red-600')
+                        }`}>
+                          COMBO
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
 
         <div className="p-5 pt-0">
           {isPending && (

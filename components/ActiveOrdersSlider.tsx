@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Order, OrderStatus, PaymentMethod } from '../types';
@@ -116,15 +115,28 @@ const ActiveOrdersSlider: React.FC<ActiveOrdersSliderProps> = ({
                            <div 
                              key={i} 
                              onClick={() => onUpdateItemStatus(order.id, i, isDelivered ? 'ready' : 'delivered')}
-                             className={`flex justify-between items-center text-[10px] font-bold transition-all cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded-lg ${isDelivered ? 'text-slate-300' : 'text-slate-600'}`}
+                             className={`flex flex-col text-[10px] font-bold transition-all cursor-pointer hover:bg-slate-50 p-1 -mx-1 rounded-lg ${isDelivered ? 'text-slate-300' : 'text-slate-600'}`}
                            >
-                             <div className="flex items-center">
-                               <span className={`w-4 h-4 flex items-center justify-center rounded text-[8px] mr-2 transition-colors ${isDelivered ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
-                                 {isDelivered ? <Icons.Check /> : item.quantity}
-                               </span>
-                               <span className={`uppercase ${isDelivered ? 'line-through' : ''}`}>{item.name}</span>
+                             <div className="flex justify-between items-center">
+                               <div className="flex items-center">
+                                 <span className={`w-4 h-4 flex items-center justify-center rounded text-[8px] mr-2 transition-colors ${isDelivered ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                                   {isDelivered ? <Icons.Check /> : item.quantity}
+                                 </span>
+                                 <span className={`uppercase ${isDelivered ? 'line-through' : ''}`}>{item.name} {item.isCombo && <span className="text-[8px] font-black bg-red-600 text-white px-1 rounded ml-1">COMBO</span>}</span>
+                               </div>
+                               <span>${(item.price * item.quantity).toLocaleString()}</span>
                              </div>
-                             <span>${(item.price * item.quantity).toLocaleString()}</span>
+                             {item.note && (
+                               <span className="mt-1 ml-6 text-[9px] italic font-bold text-red-600">
+                                 &gt; {item.note}
+                               </span>
+                             )}
+                             {item.isCombo && item.selectedComboOptions && item.selectedComboOptions.map((opt, oidx) => (
+                               <div key={oidx} className="flex justify-between items-center text-[9px] font-bold text-red-700 ml-8 p-1 -mx-1">
+                                 <span>+ {opt.label}</span>
+                                 <span>+${opt.extraPrice.toLocaleString()}</span>
+                               </div>
+                             ))}
                            </div>
                          );
                        })}

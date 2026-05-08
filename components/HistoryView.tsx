@@ -641,12 +641,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                               <span className="text-slate-600 flex items-center">
                                 <span className="bg-white border border-slate-200 w-6 h-6 flex items-center justify-center rounded-lg text-[10px] mr-3">{item.quantity}</span>
                                 {item.name}
+                                {item.isCombo && (
+                                     <span className="ml-2 text-[8px] font-black bg-red-100 text-red-700 px-1 py-0 rounded uppercase tracking-tighter">
+                                         Combo
+                                     </span>
+                                )}
                                 {item.paidQuantity && item.paidQuantity > 0 && (
                                   <span className="ml-2 text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">PAGADO: {item.paidQuantity}</span>
                                 )}
                               </span>
                               <span className="text-black">${(item.price * item.quantity).toLocaleString()}</span>
                             </div>
+                            {item.isCombo && item.selectedComboOptions && (
+                                <div className="text-[9px] font-bold text-slate-500 mb-2 ml-9 italic">
+                                    {item.selectedComboOptions.map(o => o.label).join(', ')}
+                                </div>
+                            )}
                             {item.note && (
                               <span className="text-[9px] italic font-bold text-red-600 mt-2 ml-9">
                                &gt; {item.note}

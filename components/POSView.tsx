@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Product, CartItem, Category, PaymentMethod, Order, OrderType, TakeawayType, Table, SelectedModifier } from '../types';
 import { Icons } from '../constants';
 import ModifierModal from './ModifierModal';
+import ComboModal from './ComboModal';
 
 interface POSViewProps {
   products: Product[];
@@ -12,7 +13,7 @@ interface POSViewProps {
   orders: Order[];
   tables: Table[];
   initialTableId?: string | null;
-  onAddToCart: (p: Product, mods?: SelectedModifier[], note?: string) => void;
+  onAddToCart: (p: Product, mods?: SelectedModifier[], note?: string, isCombo?: boolean, comboOpts?: ComboOption[]) => void;
   onUpdateQuantity: (id: string, delta: number) => void;
   onUpdateNote: (id: string, note: string) => void;
   onCheckout: (client: string, table: string, payment: PaymentMethod, type: OrderType, takeawayType?: TakeawayType, tip?: number) => void;
@@ -43,19 +44,37 @@ const POSView: React.FC<POSViewProps> = ({
   const [cartExpanded, setCartExpanded] = useState(false);
   const [cashReceived, setCashReceived] = useState<string>('');
   const [pendingModifierProduct, setPendingModifierProduct] = useState<Product | null>(null);
+  const [pendingComboProduct, setPendingComboProduct] = useState<Product | null>(null);
+  const [selectedIsComboForModifier, setSelectedIsComboForModifier] = useState<boolean>(false);
+  const [pendingComboOptionsForModifier, setPendingComboOptionsForModifier] = useState<ComboOption[]>([]);
 
   const handleProductClick = (product: Product) => {
-    if (product.modifierGroups && product.modifierGroups.length > 0) {
+    if (product.hasCombo) {
+      setPendingComboProduct(product);
+    } else if (product.modifierGroups && product.modifierGroups.length > 0) {
       setPendingModifierProduct(product);
     } else {
       onAddToCart(product);
     }
   };
 
+  const handleComboConfirm = (isCombo: boolean, selectedOptions: ComboOption[]) => {
+    setPendingComboProduct(null);
+    if (pendingComboProduct?.modifierGroups && pendingComboProduct.modifierGroups.length > 0) {
+        setPendingModifierProduct(pendingComboProduct);
+        setSelectedIsComboForModifier(isCombo);
+        setPendingComboOptionsForModifier(selectedOptions);
+    } else {
+        onAddToCart(pendingComboProduct!, undefined, undefined, isCombo, selectedOptions);
+    }
+  }
+
   const handleModifierConfirm = (selectedModifiers: SelectedModifier[], note: string) => {
     if (pendingModifierProduct) {
-      onAddToCart(pendingModifierProduct, selectedModifiers, note);
+      onAddToCart(pendingModifierProduct, selectedModifiers, note, selectedIsComboForModifier, pendingComboOptionsForModifier);
       setPendingModifierProduct(null);
+      setSelectedIsComboForModifier(false);
+      setPendingComboOptionsForModifier([]);
     }
   };
 
@@ -689,6 +708,18 @@ const POSView: React.FC<POSViewProps> = ({
                             <div className="flex items-center justify-between">
                               <div className="flex-grow">
                                 <h4 className="font-bold text-sm text-slate-900 uppercase tracking-tight leading-none">{item.name}</h4>
+                                {item.isCombo && (
+                                  <div className="mt-1">
+                                    <span className="text-[8px] font-black bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                      Combo
+                                    </span>
+                                    {item.selectedComboOptions && item.selectedComboOptions.map((opt, oidx) => (
+                                        <span key={oidx} className="text-[8px] font-bold text-slate-500 ml-1">
+                                            + {opt.label}
+                                        </span>
+                                    ))}
+                                  </div>
+                                )}
                                 {item.selectedModifiers && item.selectedModifiers.length > 0 && (
                                   <div className="mt-1 flex flex-wrap gap-1">
                                     {item.selectedModifiers.map((mod, midx) => (
@@ -755,6 +786,14 @@ const POSView: React.FC<POSViewProps> = ({
                 product={pendingModifierProduct}
                 onClose={() => setPendingModifierProduct(null)}
                 onConfirm={handleModifierConfirm}
+              />
+            )}
+            
+            {pendingComboProduct && (
+              <ComboModal 
+                product={pendingComboProduct}
+                onClose={() => setPendingComboProduct(null)}
+                onConfirm={handleComboConfirm}
               />
             )}
           </div>

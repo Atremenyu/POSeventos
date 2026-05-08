@@ -324,7 +324,7 @@ const App: React.FC = () => {
     return cashShifts.find(s => s.status === 'open');
   }, [cashShifts]);
 
-  const addToCart = (product: Product, selectedModifiers?: SelectedModifier[], note?: string) => {
+  const addToCart = (product: Product, selectedModifiers?: SelectedModifier[], note?: string, isCombo?: boolean, selectedComboOptions?: ComboOption[]) => {
     if (!hasOpenCashShift && (currentUser?.role === 'Admin' || currentUser?.role === 'Caja')) {
       alert('Debes abrir la caja antes de tomar pedidos.');
       // Switch view to cash audit if possible or show modal
@@ -333,32 +333,40 @@ const App: React.FC = () => {
     }
     setCart(prev => {
       const modifierKey = selectedModifiers ? JSON.stringify(selectedModifiers) : '';
+      const comboKey = JSON.stringify(selectedComboOptions || []);
       const existing = prev.find(item => 
         item.id === product.id && 
         JSON.stringify(item.selectedModifiers || []) === modifierKey &&
-        (item.note || '') === (note || '')
+        (item.note || '') === (note || '') &&
+        (item.isCombo || false) === (isCombo || false) &&
+        JSON.stringify(item.selectedComboOptions || []) === comboKey
       );
 
       if (existing) {
         return prev.map(item => 
           (item.id === product.id && 
            JSON.stringify(item.selectedModifiers || []) === modifierKey &&
-           (item.note || '') === (note || ''))
+           (item.note || '') === (note || '') &&
+           (item.isCombo || false) === (isCombo || false) &&
+           JSON.stringify(item.selectedComboOptions || []) === comboKey)
           ? { ...item, quantity: item.quantity + 1 } 
           : item
         );
       }
 
-      // Calculate base price + modifiers
+      // Calculate base price + modifiers + combo extra
       const extrasPrice = selectedModifiers?.reduce((acc, m) => acc + m.extraPrice, 0) || 0;
-      const finalPrice = product.price + extrasPrice;
+      const comboExtra = isCombo ? (selectedComboOptions?.reduce((acc, o) => acc + o.extraPrice, 0) || 0) : 0;
+      const finalPrice = product.price + extrasPrice + comboExtra;
 
       return [...prev, { 
         ...product, 
         price: finalPrice, 
         quantity: 1, 
         note: note || '', 
-        selectedModifiers 
+        selectedModifiers,
+        isCombo,
+        selectedComboOptions
       }];
     });
   };

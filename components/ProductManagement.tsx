@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, Category, Order, Table, User, Shift, UserRole, ViewState, StoreSettings } from '../types';
+import { Product, Category, Order, Table, User, Shift, UserRole, ViewState, StoreSettings, ComboOption } from '../types';
 import { Icons } from '../constants';
 
 interface ProductManagementProps {
@@ -57,7 +57,68 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const productsFileInputRef = useRef<HTMLInputElement>(null);
+  const categoriesFileInputRef = useRef<HTMLInputElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadCSV = (content: string, fileName: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportProductsToCSV = () => {
+    const header = "id,name,price,category,hasCombo,comboOptionsSerialized\n";
+    const rows = products.map(p => 
+      `${p.id},"${p.name.replace(/"/g, '""')}",${p.price},"${p.category.replace(/"/g, '""')}",${!!p.hasCombo},"${JSON.stringify(p.comboOptions || []).replace(/"/g, '""')}"`
+    ).join("\n");
+    downloadCSV(header + rows, "productos.csv");
+  };
+
+  const handleImportProducts = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(l => l.trim()).slice(1);
+        const newProducts: Product[] = lines.map(line => {
+            const [id, name, price, category, hasCombo, comboOptionsSerialized] = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/^"|"$/g, '').replace(/""/g, '"'));
+            return {
+                id, name, price: Number(price), category, hasCombo: hasCombo === 'true', comboOptions: JSON.parse(comboOptionsSerialized || '[]')
+            };
+        });
+        setProducts(newProducts);
+        alert(`${newProducts.length} productos importados.`);
+    };
+    reader.readAsText(file);
+    if(productsFileInputRef.current) productsFileInputRef.current.value = '';
+  };
+
+  const exportCategoriesToCSV = () => {
+    const header = "name\n";
+    const rows = categories.map(c => `"${c.replace(/"/g, '""')}"`).join("\n");
+    downloadCSV(header + rows, "categorias.csv");
+  };
+
+  const handleImportCategories = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(l => l.trim()).slice(1);
+        const newCategories = lines.map(line => line.replace(/^"|"$/g, '').replace(/""/g, '"'));
+        setCategories(newCategories);
+        alert(`${newCategories.length} categorías importadas.`);
+    };
+    reader.readAsText(file);
+    if(categoriesFileInputRef.current) categoriesFileInputRef.current.value = '';
+  };
 
   // Confirmation state
   const [confirmState, setConfirmState] = useState<{
@@ -93,9 +154,13 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const [name, setName] = useState('');
   const [price, setPrice] = useState(0);
   const [category, setCategory] = useState<Category>('');
+  const [hasCombo, setHasCombo] = useState(false);
+  const [comboOptions, setComboOptions] = useState<ComboOption[]>([]);
 
   // Category Form State
   const [newCatName, setNewCatName] = useState('');
+  const [newComboOptionLabel, setNewComboOptionLabel] = useState('');
+  const [newComboOptionPrice, setNewComboOptionPrice] = useState(0);
 
   // Table Form State
   const [newTableName, setNewTableName] = useState('');
@@ -110,7 +175,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
     if (editingId) {
       setProducts(prev => prev.map(p => 
-        p.id === editingId ? { ...p, name, price, category } : p
+        p.id === editingId ? { ...p, name, price, category, hasCombo, comboOptions: hasCombo ? comboOptions : undefined } : p
       ));
       setEditingId(null);
     } else {
@@ -119,6 +184,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
         name,
         price,
         category,
+        hasCombo,
+        comboOptions: hasCombo ? comboOptions : undefined
       };
       setProducts(prev => [...prev, newProduct]);
       setIsAdding(false);
@@ -183,6 +250,19 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     setName('');
     setPrice(0);
     setCategory(categories[0] || '');
+    setHasCombo(false);
+    setComboOptions([]);
+  };
+
+  const handleAddComboOption = () => {
+    if (!newComboOptionLabel.trim()) return;
+    setComboOptions(prev => [...prev, {
+      id: Date.now().toString(),
+      label: newComboOptionLabel,
+      extraPrice: newComboOptionPrice
+    }]);
+    setNewComboOptionLabel('');
+    setNewComboOptionPrice(0);
   };
 
   // Role Management State
@@ -242,6 +322,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     setName(p.name);
     setPrice(p.price);
     setCategory(p.category);
+    setHasCombo(!!p.hasCombo);
+    setComboOptions(p.comboOptions || []);
     setIsAdding(false);
   };
 
@@ -373,7 +455,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       }
     };
     reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (backupFileInputRef.current) backupFileInputRef.current.value = '';
   };
 
   const applyBackup = () => {
@@ -403,15 +485,30 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Menú de Ventas</h2>
             {!isAdding && !editingId && (
-              <button 
-                onClick={() => {
-                  setIsAdding(true);
-                  if (categories.length > 0) setCategory(categories[0]);
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-red-700 transition shadow-lg shadow-red-100"
-              >
-                <Icons.Plus /> <span>Nuevo</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={exportProductsToCSV}
+                  className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+                >
+                  Exportar
+                </button>
+                <input type="file" ref={productsFileInputRef} onChange={handleImportProducts} accept=".csv" className="hidden" />
+                <button 
+                  onClick={() => productsFileInputRef.current?.click()}
+                  className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+                >
+                  Importar
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsAdding(true);
+                    if (categories.length > 0) setCategory(categories[0]);
+                  }}
+                  className="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-red-700 transition shadow-lg shadow-red-100"
+                >
+                  <Icons.Plus /> <span>Nuevo</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -443,6 +540,29 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="flex items-center space-x-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <input type="checkbox" checked={hasCombo} onChange={e => setHasCombo(e.target.checked)} className="rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                    <span>¿Soporta Combo?</span>
+                  </label>
+                  {hasCombo && (
+                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex gap-2 mb-4">
+                        <input type="text" placeholder="Opción (ej. Papas)" value={newComboOptionLabel} onChange={e => setNewComboOptionLabel(e.target.value)} className="flex-1 p-2 rounded-lg border border-slate-200 text-xs" />
+                        <input type="number" placeholder="$ Extra" value={newComboOptionPrice} onChange={e => setNewComboOptionPrice(Number(e.target.value))} className="w-20 p-2 rounded-lg border border-slate-200 text-xs" />
+                        <button onClick={handleAddComboOption} className="bg-black text-white px-4 rounded-lg text-xs font-black">+</button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {comboOptions.map(opt => (
+                          <div key={opt.id} className="flex justify-between items-center p-2 bg-white rounded border border-slate-200 text-[10px] font-bold">
+                            <span>{opt.label} (+$ {opt.extraPrice})</span>
+                            <button onClick={() => setComboOptions(prev => prev.filter(o => o.id !== opt.id))} className="text-red-500 hover:text-red-700">×</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-8 flex justify-end space-x-3">
@@ -498,7 +618,24 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
       {activeTab === 'categories' && (
         <div className="space-y-6">
-          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Categorías</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Categorías</h2>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={exportCategoriesToCSV}
+                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+              >
+                Exportar
+              </button>
+              <input type="file" ref={categoriesFileInputRef} onChange={handleImportCategories} accept=".csv" className="hidden" />
+              <button 
+                onClick={() => categoriesFileInputRef.current?.click()}
+                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+              >
+                Importar
+              </button>
+            </div>
+          </div>
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex space-x-2">
               <input 
@@ -995,10 +1132,10 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     accept=".json" 
                     onChange={handleFileSelect} 
                     className="hidden" 
-                    ref={fileInputRef}
+                    ref={backupFileInputRef}
                   />
                   <button 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => backupFileInputRef.current?.click()}
                     className="w-full h-full bg-slate-100 text-slate-700 px-6 py-6 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition border-2 border-dashed border-slate-300 flex flex-col items-center justify-center space-y-3"
                   >
                     <div className="scale-150 mb-1 rotate-180"><Icons.FileText /></div>

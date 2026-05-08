@@ -1,5 +1,5 @@
 
-import { Product, Order, Category, Table, User, Shift, CashShift, UserRole } from '../types';
+import { Product, Order, Category, Table, User, Shift, CashShift, UserRole, StoreSettings } from '../types';
 
 const KEYS = {
   PRODUCTS: 'comanda_productos',
@@ -8,6 +8,7 @@ const KEYS = {
   TABLES: 'comanda_tablas',
   RESTAURANT_NAME: 'comanda_restaurant_name',
   EVENT_TYPE: 'comanda_event_type',
+  SETTINGS: 'comanda_store_settings',
   USERS: 'comanda_usuarios',
   SHIFTS: 'comanda_turnos',
   CASH_SHIFTS: 'comanda_turnos_caja',
@@ -15,6 +16,25 @@ const KEYS = {
 };
 
 export const storage = {
+  getSettings: (): StoreSettings => {
+    const data = localStorage.getItem(KEYS.SETTINGS);
+    if (data) {
+      return JSON.parse(data);
+    }
+    // Fallback for backwards compatibility
+    return {
+      name: localStorage.getItem(KEYS.RESTAURANT_NAME) || 'Mi Restaurante',
+      eventType: localStorage.getItem(KEYS.EVENT_TYPE) || 'Evento Gastronómico',
+      currency: 'MXN',
+      taxRate: 0,
+    };
+  },
+  saveSettings: (settings: StoreSettings) => {
+    localStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+    // For backwards compatibility and parts of the app that rely on it
+    localStorage.setItem(KEYS.RESTAURANT_NAME, settings.name);
+    localStorage.setItem(KEYS.EVENT_TYPE, settings.eventType);
+  },
   getRoles: (): UserRole[] => {
     const data = localStorage.getItem(KEYS.ROLES);
     return data ? JSON.parse(data) : [];

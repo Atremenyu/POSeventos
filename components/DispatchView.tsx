@@ -10,7 +10,7 @@ interface DispatchViewProps {
   orders: Order[];
   tables: Table[];
   onDeliver: (id: string) => void;
-  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number, amount?: number) => void;
   onCancel: (id: string) => void;
   onTransfer: (id: string, newTable: string) => void;
   onStartPreparing: (id: string, mins: number) => void;

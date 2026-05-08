@@ -98,7 +98,21 @@ export interface CashShift {
   notes?: string;
 }
 
-export type ViewState = 'pos' | 'dispatch' | 'history' | 'settings' | 'tables' | 'login' | 'cash_audit';
+export interface StoreSettings {
+  name: string;
+  eventType: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  taxId?: string;
+  currency: string;
+  taxRate: number;
+  receiptHeader?: string;
+  receiptFooter?: string;
+}
+
+export type ViewState = 'pos' | 'dispatch' | 'central' | 'tables' | 'login' | 'cash_audit';
+export type AdminTabType = 'overview' | 'history' | 'cash' | 'products' | 'categories' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
 
 export interface UserRole {
   name: string;

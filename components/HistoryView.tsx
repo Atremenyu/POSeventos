@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Order, Table } from '../types';
+import { Order, Table, CashShift, StoreSettings } from '../types';
 import { Icons } from '../constants';
 import { generateTicketPDF } from '../services/pdfGenerator';
 import { 
@@ -11,23 +11,38 @@ import {
 interface HistoryViewProps {
   orders: Order[];
   tables: Table[];
+  cashShifts: CashShift[];
   restaurantName?: string;
+  settings?: StoreSettings;
   hasOpenCashShift?: boolean;
   onCloseCashShift?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#000000'];
 
 const HistoryView: React.FC<HistoryViewProps> = ({ 
-  orders, tables, restaurantName, hasOpenCashShift, onCloseCashShift 
+  orders, tables, cashShifts, restaurantName, settings, hasOpenCashShift, onCloseCashShift, onOpenSettings 
 }) => {
+  const today = new Date().toISOString().split('T')[0];
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState({ start: today, end: today });
+  const [isFilterActive, setIsFilterActive] = useState(false);
+
+  const filteredOrders = useMemo(() => {
+    if (!isFilterActive) return orders;
+    
+    return orders.filter(order => {
+      const orderDate = new Date(order.date).toISOString().split('T')[0];
+      return orderDate >= dateRange.start && orderDate <= dateRange.end;
+    });
+  }, [orders, dateRange, isFilterActive]);
 
   const paymentMethods = useMemo(() => {
     const methods = new Set<string>();
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       if (o.payments && o.payments.length > 0) {
         o.payments.forEach(p => methods.add(p.method));
       } else {
@@ -35,10 +50,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({
       }
     });
     return Array.from(methods).filter(m => m !== 'Pendiente');
-  }, [orders]);
+  }, [filteredOrders]);
 
   const analyticsData = useMemo(() => {
-    const validOrders = orders.filter(o => o.status !== 'cancelled');
+    const validOrders = filteredOrders.filter(o => o.status !== 'cancelled');
     
     // Revenue and Methods
     let totalRevenue = 0;
@@ -109,10 +124,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({
       daily, products, hourly, methods, totalRevenue, totalTips, orderCount, deliveredCount, 
       avgOrderValue, occupancyRate, occupiedTables 
     };
-  }, [orders, tables]);
+  }, [filteredOrders, tables]);
 
   const displayOrders = useMemo(() => {
-    return orders
+    return filteredOrders
       .filter(o => {
         if (paymentFilter === 'all') return true;
         if (o.payments && o.payments.length > 0) {
@@ -121,7 +136,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
         return o.payment === paymentFilter;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [orders, paymentFilter]);
+  }, [filteredOrders, paymentFilter]);
 
   const downloadCSV = (filename: string, content: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -202,31 +217,117 @@ const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex items-center space-x-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            <button 
+              onClick={() => {
+                const prev = new Date(dateRange.start);
+                prev.setDate(prev.getDate() - 1);
+                const prevStr = prev.toISOString().split('T')[0];
+                setDateRange({ start: prevStr, end: prevStr });
+                setIsFilterActive(true);
+              }}
+              className="p-2 text-slate-400 hover:text-black transition-colors"
+              title="Día Anterior"
+            >
+              <Icons.ArrowLeft size={14} />
+            </button>
+            <div className="flex items-center px-1 space-x-2">
+              <Icons.Calendar size={14} className="text-slate-400" />
+              <input 
+                type="date" 
+                value={dateRange.start}
+                onChange={(e) => {
+                  setDateRange(prev => ({ ...prev, start: e.target.value, end: e.target.value === prev.end ? e.target.value : prev.end }));
+                  setIsFilterActive(true);
+                }}
+                className="bg-transparent border-none text-[10px] font-black uppercase tracking-tight focus:ring-0 cursor-pointer p-0"
+              />
+              {dateRange.start !== dateRange.end && (
+                <>
+                  <span className="text-slate-300 text-[10px] font-black">-</span>
+                  <input 
+                    type="date" 
+                    value={dateRange.end}
+                    onChange={(e) => {
+                      setDateRange(prev => ({ ...prev, end: e.target.value }));
+                      setIsFilterActive(true);
+                    }}
+                    className="bg-transparent border-none text-[10px] font-black uppercase tracking-tight focus:ring-0 cursor-pointer p-0"
+                  />
+                </>
+              )}
+            </div>
+            <button 
+              onClick={() => {
+                const next = new Date(dateRange.start);
+                next.setDate(next.getDate() + 1);
+                const nextStr = next.toISOString().split('T')[0];
+                setDateRange({ start: nextStr, end: nextStr });
+                setIsFilterActive(true);
+              }}
+              className="p-2 text-slate-400 hover:text-black transition-colors"
+              title="Día Siguiente"
+            >
+              <div className="rotate-180">
+                <Icons.ArrowLeft size={14} />
+              </div>
+            </button>
+            
+            <div className="w-px h-4 bg-slate-200 mx-2"></div>
+
+            <button 
+              onClick={() => {
+                setDateRange({ start: today, end: today });
+                setIsFilterActive(true);
+              }}
+              className={`px-3 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${
+                isFilterActive && dateRange.start === today && dateRange.end === today
+                ? 'bg-black text-white shadow-md'
+                : 'text-slate-500 hover:text-black'
+              }`}
+            >
+              Hoy
+            </button>
+
+            {isFilterActive && (
+              <button 
+                onClick={() => {
+                  setIsFilterActive(false);
+                  setDateRange({ start: today, end: today });
+                }}
+                className="px-3 py-2 text-slate-400 hover:text-red-600 transition-all font-black text-[9px] uppercase tracking-widest"
+                title="Mostrar Todo el Historial"
+              >
+                Histórico
+              </button>
+            )}
+          </div>
+
           {hasOpenCashShift && (
             <button 
               onClick={onCloseCashShift}
-              className="px-8 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-red-200 flex items-center space-x-2"
+              className="w-full sm:w-auto px-8 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-red-200 flex items-center justify-center space-x-2"
             >
               <Icons.Lock size={16} />
               <span>Realizar Corte</span>
             </button>
           )}
-          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+          <div className="flex w-full sm:w-auto overflow-x-auto custom-scrollbar bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
             <button 
               onClick={() => setActiveTab('list')}
-              className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+              className={`flex-shrink-0 px-4 sm:px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
                 activeTab === 'list' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
               }`}
             >
-              Operaciones
+              Ventas
             </button>
             <button 
               onClick={() => setActiveTab('analytics')}
-              className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+              className={`flex-shrink-0 px-4 sm:px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
                 activeTab === 'analytics' ? 'bg-black text-white shadow-xl scale-105' : 'text-slate-500 hover:text-black'
               }`}
             >
-              Estadísticas
+              Dashboard
             </button>
           </div>
         </div>
@@ -430,17 +531,17 @@ const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       ) : (
         /* History List (Existing) */
-        <div className="bg-white rounded-[3rem] shadow-xl border border-slate-200 overflow-x-auto">
-          <div className="p-4 sm:p-8 border-b border-slate-200 bg-slate-50 font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4 min-w-[600px] md:min-w-0">
+        <div className="bg-white rounded-[3rem] shadow-xl border border-slate-200 overflow-hidden">
+          <div className="p-4 sm:p-8 border-b border-slate-200 bg-slate-50 font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <span className="flex items-center">
-              <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-2"></div>
-              Registro de Movimientos
+              <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-2 shrink-0"></div>
+              Registro de Ventas
             </span>
             
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-start md:justify-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
               <button
                 onClick={() => setPaymentFilter('all')}
-                className={`px-4 py-2 rounded-xl transition-all border-2 ${paymentFilter === 'all' ? 'bg-black text-white border-black' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}
+                className={`px-4 py-2 shrink-0 rounded-xl transition-all border-2 ${paymentFilter === 'all' ? 'bg-black text-white border-black' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}
               >
                 Todos
               </button>
@@ -448,7 +549,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                 <button
                   key={method}
                   onClick={() => setPaymentFilter(method)}
-                  className={`px-4 py-2 rounded-xl transition-all border-2 ${paymentFilter === method ? 'bg-black text-white border-black' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}
+                  className={`px-4 py-2 shrink-0 rounded-xl transition-all border-2 ${paymentFilter === method ? 'bg-black text-white border-black' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}
                 >
                   {method}
                 </button>
@@ -469,58 +570,60 @@ const HistoryView: React.FC<HistoryViewProps> = ({
               const isCancelled = order.status === 'cancelled';
               
               return (
-                <div key={order.id} className={`transition-colors hover:bg-slate-50/80 ${isCancelled ? 'bg-slate-100 opacity-60 grayscale' : (order.isPaid ? '' : 'bg-amber-50/30')}`}>
+                <div key={order.id} className={`transition-colors border-b border-slate-50 hover:bg-slate-50/80 ${isCancelled ? 'bg-slate-100 opacity-60 grayscale' : (order.isPaid ? '' : 'bg-amber-50/30')}`}>
                   <div 
-                    className="p-6 flex items-center justify-between cursor-pointer"
+                    className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer gap-4 sm:gap-0"
                     onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
                   >
-                    <div className="flex items-center space-x-6">
-                      <div className={`w-12 h-12 flex items-center justify-center rounded-2xl border-2 transition-all ${isCancelled ? 'bg-slate-300 border-slate-300 text-slate-500' : (order.isPaid ? 'bg-black text-white border-black rotate-3 shadow-lg' : 'bg-white text-amber-600 border-amber-600 shadow-sm')}`}>
-                        {isCancelled ? <Icons.Trash /> : (order.isPaid ? <Icons.CheckCircle /> : <Icons.ChefHat />)}
+                    <div className="flex items-center space-x-4 sm:space-x-6 w-full sm:w-auto">
+                      <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl border-2 transition-all ${isCancelled ? 'bg-slate-300 border-slate-300 text-slate-500' : (order.isPaid ? 'bg-black text-white border-black rotate-3 shadow-lg' : 'bg-white text-amber-600 border-amber-600 shadow-sm')}`}>
+                        {isCancelled ? <Icons.Trash size={18} /> : (order.isPaid ? <Icons.CheckCircle size={18} /> : <Icons.ChefHat size={18} />)}
                       </div>
-                      <div>
-                        <p className={`font-black uppercase tracking-tighter text-lg leading-none ${isCancelled ? 'text-slate-500' : 'text-black'}`}>
+                      <div className="overflow-hidden min-w-0 flex-1">
+                        <p className={`font-black uppercase tracking-tighter text-base sm:text-lg leading-none truncate ${isCancelled ? 'text-slate-500' : 'text-black'}`}>
                           {isDineIn ? `MESA: ${order.table}` : `${order.takeawayType?.toUpperCase() || 'LLEVAR'}`} 
                         </p>
-                        <div className="flex items-center space-x-2 mt-1.5 font-black uppercase tracking-widest text-[10px]">
+                        <div className="flex items-center space-x-2 mt-1.5 font-black uppercase tracking-widest text-[9px] sm:text-[10px] flex-wrap gap-y-1">
                            <span className="text-slate-400">{new Date(order.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                           <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                           <span className="text-slate-400">{order.payment}</span>
-                           {order.client !== 'Mostrador' && (
+                           <span className="w-1 h-1 bg-slate-200 rounded-full shrink-0"></span>
+                           <span className="text-slate-400 truncate max-w-[80px] sm:max-w-none">{order.payment}</span>
+                           {order.client && order.client !== 'Mostrador' && (
                              <>
-                               <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                               <span className="text-red-600">{order.client}</span>
+                               <span className="w-1 h-1 bg-slate-200 rounded-full shrink-0"></span>
+                               <span className="text-red-600 truncate max-w-[100px] sm:max-w-none">{order.client}</span>
                              </>
                            )}
                            {isCancelled && (
                              <>
-                               <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                               <span className="text-slate-500">CANCELADA</span>
+                               <span className="w-1 h-1 bg-slate-200 rounded-full shrink-0"></span>
+                               <span className="text-slate-500 pl-1">CANCELADA</span>
                              </>
                            )}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right flex items-center space-x-8">
-                      <div className="flex flex-col items-end">
-                        <p className={`font-black text-2xl tracking-tighter leading-none mb-1.5 ${isCancelled ? 'text-slate-400 line-through' : 'text-black'}`}>
-                          ${order.total.toLocaleString()}
-                        </p>
-                        <div className="flex space-x-1">
-                          <span className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
-                            isCancelled 
-                              ? 'bg-slate-400 text-white' 
-                              : order.status === 'delivered' 
-                                ? 'bg-green-600 text-white' 
-                                : 'bg-red-600 text-white animate-pulse'
-                          }`}>
-                            {isCancelled ? 'ANULADA' : order.status === 'delivered' ? 'RECIBIDO' : 'EN COCINA'}
-                          </span>
-                          {!order.isPaid && !isCancelled && (
-                            <span className="text-[8px] font-black bg-amber-500 text-white px-3 py-1 rounded-full uppercase tracking-widest">
-                              PAGAR
+                    <div className="text-right flex items-center justify-between sm:justify-end w-full sm:w-auto mt-2 sm:mt-0 pl-[56px] sm:pl-0 sm:space-x-8">
+                      <div className="flex flex-col items-start sm:items-end w-full sm:w-auto">
+                        <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end mb-1.5 sm:space-x-4">
+                          <p className={`font-black text-xl sm:text-2xl tracking-tighter leading-none ${isCancelled ? 'text-slate-400 line-through' : 'text-black'}`}>
+                            ${order.total.toLocaleString()}
+                          </p>
+                          <div className="flex space-x-1 ml-auto sm:ml-0">
+                            <span className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
+                              isCancelled 
+                                ? 'bg-slate-400 text-white' 
+                                : order.status === 'delivered' 
+                                  ? 'bg-green-600 text-white' 
+                                  : 'bg-red-600 text-white animate-pulse'
+                            }`}>
+                              {isCancelled ? 'ANULADA' : order.status === 'delivered' ? 'RECIBIDO' : 'EN COCINA'}
                             </span>
-                          )}
+                            {!order.isPaid && !isCancelled && (
+                              <span className="text-[8px] font-black bg-amber-500 text-white px-3 py-1 rounded-full uppercase tracking-widest">
+                                PAGAR
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className={`transition-transform duration-500 text-slate-300 ${expandedId === order.id ? 'rotate-180 text-red-600' : ''}`}>

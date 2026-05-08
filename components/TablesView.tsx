@@ -10,7 +10,7 @@ interface TablesViewProps {
   tables: Table[];
   orders: Order[];
   onSelectTable: (tableId: string) => void;
-  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number, amount?: number) => void;
   onSplitOrder: (id: string, splitQuantities: Record<number, number>, payment: PaymentMethod, tip?: number) => void;
   onCancel: (id: string) => void;
   onDeliver: (id: string) => void;
@@ -26,6 +26,8 @@ const TablesView: React.FC<TablesViewProps> = ({
   
   // Split Bill State
   const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitType, setSplitType] = useState<'articles' | 'equal'>('articles');
+  const [numPeople, setNumPeople] = useState<number>(2);
   const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
   const [cashReceived, setCashReceived] = useState<string>('');
   const [tipAmount, setTipAmount] = useState<string>('');
@@ -63,6 +65,7 @@ const TablesView: React.FC<TablesViewProps> = ({
       setManagingTableId(table.id);
       setSelectedPayment(null);
       setIsSplitMode(false);
+      setSplitType('articles');
       setSplitQuantities({});
     } else {
       onSelectTable(table.id);
@@ -101,6 +104,7 @@ const TablesView: React.FC<TablesViewProps> = ({
       setCashReceived('');
     } else {
       setIsSplitMode(false);
+      setSplitType('articles');
       setSplitQuantities({});
       setSelectedPayment(null);
       setTipAmount('');
@@ -211,15 +215,64 @@ const TablesView: React.FC<TablesViewProps> = ({
                 <div className="space-y-4">
                   <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumen de Cuenta</h4>
-                    <button 
-                      onClick={() => setIsSplitMode(!isSplitMode)}
-                      className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full transition-all ${isSplitMode ? 'bg-red-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:text-black'}`}
-                    >
-                      {isSplitMode ? 'Cancelar División' : 'Dividir Cuenta'}
-                    </button>
+                    <div className="flex space-x-2">
+                      {isSplitMode && (
+                        <div className="flex bg-slate-100 rounded-full p-1 mr-2">
+                          <button 
+                            onClick={() => setSplitType('articles')}
+                            className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full transition-all ${splitType === 'articles' ? 'bg-white text-black shadow-sm' : 'text-slate-400'}`}
+                          >
+                            Artículos
+                          </button>
+                          <button 
+                            onClick={() => setSplitType('equal')}
+                            className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full transition-all ${splitType === 'equal' ? 'bg-white text-black shadow-sm' : 'text-slate-400'}`}
+                          >
+                            Equitativa
+                          </button>
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => setIsSplitMode(!isSplitMode)}
+                        className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full transition-all ${isSplitMode ? 'bg-red-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:text-black'}`}
+                      >
+                        {isSplitMode ? 'Cancelar' : 'Dividir'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    {managingOrder.items.map((item, idx) => {
+
+                  {isSplitMode && splitType === 'equal' ? (
+                    <div className="p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] space-y-4">
+                       <div className="text-center space-y-1">
+                          <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dividir en partes iguales</h5>
+                          <p className="text-2xl font-black text-black tracking-tighter">
+                            ${((managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0)) / numPeople).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="text-xs text-slate-400 font-bold tracking-normal ml-1">por persona</span>
+                          </p>
+                       </div>
+                       
+                       <div className="flex justify-center items-center space-x-4">
+                          <button 
+                            onClick={() => setNumPeople(Math.max(2, numPeople - 1))}
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-red-600 hover:bg-red-50 transition shadow-sm"
+                          >
+                            <Icons.Minus />
+                          </button>
+                          <div className="flex flex-col items-center">
+                            <span className="text-2xl font-black text-red-600">{numPeople}</span>
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Personas</span>
+                          </div>
+                          <button 
+                            onClick={() => setNumPeople(Math.min(20, numPeople + 1))}
+                            className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-red-600 hover:bg-red-50 transition shadow-sm"
+                          >
+                            <Icons.Plus />
+                          </button>
+                       </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {managingOrder.items.map((item, idx) => {
                       const remainingQty = item.quantity - (item.paidQuantity || 0);
                       const isFullyPaid = remainingQty <= 0;
                       
@@ -273,13 +326,18 @@ const TablesView: React.FC<TablesViewProps> = ({
                       );
                     })}
                   </div>
+                )}
 
-                  <div className={`flex justify-between items-center px-4 py-4 rounded-2xl mt-4 transition-colors ${isSplitMode ? 'bg-red-600 text-white shadow-xl shadow-red-100' : 'bg-black text-white'}`}>
+                <div className={`flex justify-between items-center px-4 py-4 rounded-2xl mt-4 transition-colors ${isSplitMode ? 'bg-red-600 text-white shadow-xl shadow-red-100' : 'bg-black text-white'}`}>
                     <span className="text-xs font-black uppercase tracking-widest opacity-60">
-                      {isSplitMode ? 'Total a Pagar (Seleccionado)' : (managingOrder.partialPayments && managingOrder.partialPayments.length > 0 ? 'Resta por Pagar' : 'Total de la Mesa')}
+                      {isSplitMode 
+                        ? (splitType === 'equal' ? `Pago 1 de ${numPeople}` : 'Total Seleccionado') 
+                        : (managingOrder.payments && managingOrder.payments.length > 0 ? 'Resta por Pagar' : 'Total de la Mesa')}
                     </span>
                     <span className="text-2xl font-black tracking-tighter">
-                      ${(isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.partialPayments?.reduce((acc, p) => acc + p.amount, 0) || 0))).toLocaleString()}
+                      ${(isSplitMode 
+                        ? (splitType === 'equal' ? (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0)) / numPeople : splitTotal) 
+                        : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0))).toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -310,7 +368,10 @@ const TablesView: React.FC<TablesViewProps> = ({
                     {(['Efectivo', 'Tarjeta', 'Transferencia'] as PaymentMethod[]).map(met => {
                       const isSelected = selectedPayment === met;
                       const isCash = met === 'Efectivo';
-                      const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                      const remainingTotal = managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                      const amountToPay = isSplitMode 
+                        ? (splitType === 'equal' ? remainingTotal / numPeople : splitTotal) 
+                        : remainingTotal;
                       const tip = parseFloat(tipAmount) || 0;
                       const required = amountToPay + tip;
 
@@ -438,7 +499,10 @@ const TablesView: React.FC<TablesViewProps> = ({
                   <button 
                     onClick={() => {
                       if (selectedPayment) {
-                        const amountToPay = isSplitMode ? splitTotal : (managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0));
+                        const remainingTotal = managingOrder.total - (managingOrder.payments?.reduce((acc, p) => acc + p.amount, 0) || 0);
+                        const amountToPay = isSplitMode 
+                          ? (splitType === 'equal' ? remainingTotal / numPeople : splitTotal) 
+                          : remainingTotal;
                         const tip = parseFloat(tipAmount) || 0;
                         const required = amountToPay + tip;
 
@@ -451,7 +515,15 @@ const TablesView: React.FC<TablesViewProps> = ({
                         }
 
                         if (isSplitMode) {
-                          handleConfirmSplit(tip);
+                          if (splitType === 'articles') {
+                            handleConfirmSplit(tip);
+                          } else {
+                            // Equal split
+                            onPay(managingOrder.id, selectedPayment, tip, amountToPay);
+                            setManagingTableId(null);
+                            setTipAmount('');
+                            setNumPeople(2);
+                          }
                         } else {
                           onPay(managingOrder.id, selectedPayment, tip);
                           setManagingTableId(null);
@@ -459,15 +531,15 @@ const TablesView: React.FC<TablesViewProps> = ({
                         }
                       }
                     }}
-                    disabled={!selectedPayment || (isSplitMode && splitTotal === 0)}
+                    disabled={!selectedPayment || (isSplitMode && splitType === 'articles' && splitTotal === 0)}
                     className={`w-full py-5 rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 flex items-center justify-center space-x-3 ${
-                      selectedPayment && (!isSplitMode || splitTotal > 0)
+                      selectedPayment && (!isSplitMode || (splitType === 'equal' || splitTotal > 0))
                       ? 'bg-red-600 text-white border-red-900 hover:bg-black hover:border-slate-800' 
                       : 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed'
                     }`}
                   >
                     <Icons.CreditCard />
-                    <span>{isSplitMode ? 'COBRAR PARCIAL' : 'COBRAR Y CERRAR'}</span>
+                    <span>{isSplitMode ? (splitType === 'equal' ? 'COBRAR PARTE' : 'COBRAR PARCIAL') : 'COBRAR Y CERRAR'}</span>
                   </button>
                 </div>
               </div>

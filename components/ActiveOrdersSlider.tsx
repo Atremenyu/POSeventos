@@ -10,7 +10,7 @@ interface ActiveOrdersSliderProps {
   orders: Order[];
   onDeliver: (id: string) => void;
   onUpdateItemStatus: (orderId: string, itemIdx: number, status: OrderStatus) => void;
-  onPay: (id: string, payment: PaymentMethod) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number, amount?: number) => void;
   onCancel: (id: string) => void;
 }
 

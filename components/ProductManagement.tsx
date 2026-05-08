@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, Category, Order, Table, User, Shift, UserRole, ViewState } from '../types';
+import { Product, Category, Order, Table, User, Shift, UserRole, ViewState, StoreSettings } from '../types';
 import { Icons } from '../constants';
 
 interface ProductManagementProps {
@@ -12,15 +12,16 @@ interface ProductManagementProps {
   setTables: React.Dispatch<React.SetStateAction<Table[]>>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
-  restaurantName: string;
-  eventType: string;
-  onUpdateSettings: (name: string, type: string) => void;
+  settings: StoreSettings;
+  onUpdateSettings: (settings: StoreSettings) => void;
   onRestoreDatabase: (data: any) => void;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   shifts: Shift[];
   roles: UserRole[];
   setRoles: React.Dispatch<React.SetStateAction<UserRole[]>>;
+  initialTab?: 'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts' | 'roles';
+  activeTab?: 'overview' | 'history' | 'products' | 'categories' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
 }
 
 interface BackupPreview {
@@ -29,8 +30,7 @@ interface BackupPreview {
   tables: Table[];
   orders: Order[];
   users: User[];
-  restaurantName: string;
-  eventType: string;
+  settings: StoreSettings;
   fileName: string;
 }
 
@@ -45,17 +45,16 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   setTables,
   orders,
   setOrders,
-  restaurantName,
-  eventType,
+  settings,
   onUpdateSettings,
   onRestoreDatabase,
   users,
   setUsers,
   shifts,
   roles,
-  setRoles
+  setRoles,
+  activeTab = 'products'
 }) => {
-  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts' | 'roles'>('products');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,17 +79,15 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   // General Settings Form
-  const [formRestName, setFormRestName] = useState(restaurantName);
-  const [formEventType, setFormEventType] = useState(eventType);
+  const [formSettings, setFormSettings] = useState<StoreSettings>(settings);
 
   // Backup Import State
   const [preview, setPreview] = useState<BackupPreview | null>(null);
 
   // Sync internal form with props when they change (critical for imports)
   useEffect(() => {
-    setFormRestName(restaurantName);
-    setFormEventType(eventType);
-  }, [restaurantName, eventType]);
+    setFormSettings(settings);
+  }, [settings]);
 
   // Product Form State
   const [name, setName] = useState('');
@@ -236,8 +233,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     { id: 'pos', label: 'Venta (POS)' },
     { id: 'tables', label: 'Mesas' },
     { id: 'dispatch', label: 'Cocina (Dispatch)' },
-    { id: 'history', label: 'Administración' },
-    { id: 'settings', label: 'Configuración' },
+    { id: 'central', label: 'Centro de Control (CRM)' },
+    { id: 'cash_audit', label: 'Auditoría de Caja' },
   ];
 
   const startEditProduct = (p: Product) => {
@@ -319,7 +316,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const handleSaveGeneral = () => {
-    onUpdateSettings(formRestName, formEventType);
+    onUpdateSettings(formSettings);
     alert('Configuración actualizada');
   };
 
@@ -331,8 +328,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       tables,
       orders,
       users,
-      restaurantName,
-      eventType,
+      settings,
       exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -367,8 +363,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           tables: data.tables || [],
           orders: data.orders || [],
           users: data.users || [],
-          restaurantName: data.restaurantName || restaurantName,
-          eventType: data.eventType || eventType,
+          settings: data.settings || settings,
           fileName: file.name
         });
       } catch (err) {
@@ -392,7 +387,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           onRestoreDatabase(preview);
           alert('Base de datos restaurada con éxito.');
           setPreview(null);
-          setActiveTab('products');
         } catch (error) {
           console.error("Error durante applyBackup:", error);
           alert("Ocurrió un error al aplicar el respaldo.");
@@ -404,51 +398,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 overflow-hidden">
-      <div className="flex space-x-1 bg-slate-200 p-1 rounded-xl w-fit max-w-full overflow-x-auto scrollbar-hide">
-        <button 
-          onClick={() => setActiveTab('products')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'products' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Productos
-        </button>
-        <button 
-          onClick={() => setActiveTab('categories')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'categories' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Categorías
-        </button>
-        <button 
-          onClick={() => setActiveTab('tables')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'tables' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Mesas
-        </button>
-        <button 
-          onClick={() => setActiveTab('general')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'general' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          General
-        </button>
-        <button 
-          onClick={() => setActiveTab('users')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'users' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Usuarios
-        </button>
-        <button 
-          onClick={() => setActiveTab('shifts')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'shifts' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Turnos
-        </button>
-        <button 
-          onClick={() => setActiveTab('roles')}
-          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition ${activeTab === 'roles' ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-300'}`}
-        >
-          Roles
-        </button>
-      </div>
-
       {activeTab === 'products' && (
         <>
           <div className="flex justify-between items-center">
@@ -469,7 +418,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           {(isAdding || editingId) && (
             <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
               <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Item</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Item</label>
                   <input 
@@ -640,7 +589,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           {(isAdding || editingId) && (
             <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
               <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Usuario</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre Completo</label>
                   <input 
@@ -859,7 +808,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {roles.map(role => (
               <div key={role.name} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between group transition-all hover:border-black">
                 <div>
@@ -906,42 +855,125 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-400 pb-10">
           <div className="space-y-6">
             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Ajustes del Negocio</h2>
-            <div className="bg-white p-8 rounded-3xl border-2 border-black shadow-2xl space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            {/* Perfil del Negocio */}
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-sm font-black text-black uppercase tracking-widest border-b border-slate-100 pb-4">Perfil del Negocio</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Negocio / Restaurante</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Negocio</label>
                   <div className="relative">
-                    <div className="absolute left-3 top-3.5 text-red-600 opacity-50"><Icons.ChefHat /></div>
+                    <div className="absolute left-3 top-3 text-slate-400"><Icons.ChefHat size={18}/></div>
                     <input 
                       type="text" 
-                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-black text-black"
-                      value={formRestName}
-                      onChange={e => setFormRestName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                      value={formSettings.name}
+                      onChange={e => setFormSettings({...formSettings, name: e.target.value})}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Evento</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Evento / Rubro</label>
                   <div className="relative">
-                    <div className="absolute left-3 top-3.5 text-red-600 opacity-50"><Icons.MapPin /></div>
+                    <div className="absolute left-3 top-3 text-slate-400"><Icons.MapPin size={18}/></div>
                     <input 
                       type="text" 
-                      className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-700"
-                      value={formEventType}
-                      onChange={e => setFormEventType(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                      value={formSettings.eventType}
+                      onChange={e => setFormSettings({...formSettings, eventType: e.target.value})}
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Teléfono</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej. +52 123 456 7890"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                    value={formSettings.phone || ''}
+                    onChange={e => setFormSettings({...formSettings, phone: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correo Electrónico</label>
+                  <input 
+                    type="email" 
+                    placeholder="contacto@minegocio.com"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                    value={formSettings.email || ''}
+                    onChange={e => setFormSettings({...formSettings, email: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dirección Comercial</label>
+                  <input 
+                    type="text" 
+                    placeholder="Av. Principal 123, Ciudad, País"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                    value={formSettings.address || ''}
+                    onChange={e => setFormSettings({...formSettings, address: e.target.value})}
+                  />
+                </div>
               </div>
-              
-              <div className="pt-4 flex justify-end">
-                <button 
-                  onClick={handleSaveGeneral}
-                  className="bg-red-600 text-white px-12 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-red-700 transition shadow-2xl shadow-red-200"
-                >
-                  Actualizar Configuración
-                </button>
+            </div>
+
+            {/* Configuración de Tickets */}
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-sm font-black text-black uppercase tracking-widest border-b border-slate-100 pb-4">Tickets & Recibos</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Moneda</label>
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm appearance-none"
+                    value={formSettings.currency}
+                    onChange={e => setFormSettings({...formSettings, currency: e.target.value})}
+                  >
+                    <option value="MXN">Peso Mexicano (MXN)</option>
+                    <option value="USD">Dólar Estadounidense (USD)</option>
+                    <option value="EUR">Euro (EUR)</option>
+                    <option value="ARS">Peso Argentino (ARS)</option>
+                    <option value="COP">Peso Colombiano (COP)</option>
+                    <option value="PEN">Sol Peruano (PEN)</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificador Fiscal / RFC / RUT</label>
+                  <input 
+                    type="text" 
+                    placeholder="Opcional"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
+                    value={formSettings.taxId || ''}
+                    onChange={e => setFormSettings({...formSettings, taxId: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensaje Impreso - Cabecera</label>
+                  <textarea 
+                    placeholder="Ej. ¡Bienvenidos a nuestro local! / Wi-Fi: ... "
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm resize-none h-20"
+                    value={formSettings.receiptHeader || ''}
+                    onChange={e => setFormSettings({...formSettings, receiptHeader: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensaje Impreso - Pie de Página</label>
+                  <textarea 
+                    placeholder="Ej. ¡Gracias por su preferencia! / Síganos en redes: @minegocio"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm resize-none h-20"
+                    value={formSettings.receiptFooter || ''}
+                    onChange={e => setFormSettings({...formSettings, receiptFooter: e.target.value})}
+                  />
+                </div>
               </div>
+            </div>
+            
+            <div className="pt-2 flex justify-end">
+              <button 
+                onClick={handleSaveGeneral}
+                className="bg-black text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-slate-800 transition shadow-2xl"
+              >
+                Guardar Configuración
+              </button>
             </div>
           </div>
 
@@ -1012,7 +1044,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
                   <div className="p-4 bg-white rounded-xl border border-slate-200 mb-6">
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ajustes a aplicar:</p>
-                    <p className="text-[10px] font-black uppercase tracking-tight text-red-600">{preview.restaurantName} / {preview.eventType}</p>
+                    <p className="text-[10px] font-black uppercase tracking-tight text-red-600">{preview.settings.name} / {preview.settings.eventType}</p>
                   </div>
 
                   <button 

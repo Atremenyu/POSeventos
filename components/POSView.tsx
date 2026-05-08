@@ -18,7 +18,7 @@ interface POSViewProps {
   onCheckout: (client: string, table: string, payment: PaymentMethod, type: OrderType, takeawayType?: TakeawayType, tip?: number) => void;
   onDeliver: (id: string) => void;
   onUpdateItemStatus: (orderId: string, itemIdx: number, status: any) => void;
-  onPay: (id: string, payment: PaymentMethod, tip?: number) => void;
+  onPay: (id: string, payment: PaymentMethod, tip?: number, amount?: number) => void;
   onCancel: (id: string) => void;
   onToggleOrders: () => void;
   hasOpenCashShift: boolean;

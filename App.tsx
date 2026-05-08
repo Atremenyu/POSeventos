@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift, SelectedModifier, CashShift, UserRole, PaymentRecord } from './types';
+import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift, SelectedModifier, CashShift, UserRole, PaymentRecord, StoreSettings } from './types';
 import { storage } from './services/storage';
 import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_TABLES, INITIAL_USERS, ROLES, Icons } from './constants';
 import POSView from './components/POSView';
@@ -14,6 +14,7 @@ import ActiveOrdersSlider from './components/ActiveOrdersSlider';
 import { LoginView } from './components/LoginView';
 import CashOpeningModal from './components/CashOpeningModal';
 import CashClosingModal from './components/CashClosingModal';
+import AdminCRM from './components/AdminCRM';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('pos');
@@ -29,8 +30,12 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentShiftId, setCurrentShiftId] = useState<string | null>(null);
   
-  const [restaurantName, setRestaurantName] = useState('Mi Restaurante');
-  const [eventType, setEventType] = useState('Evento Gastronómico');
+  const [settings, setSettings] = useState<StoreSettings>({
+    name: 'Mi Restaurante',
+    eventType: 'Evento Gastronómico',
+    currency: 'MXN',
+    taxRate: 0,
+  });
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeNotification, setActiveNotification] = useState<{ id: string, message: string, type: 'ready' } | null>(null);
@@ -38,6 +43,7 @@ const App: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showOpeningModal, setShowOpeningModal] = useState(false);
   const [showClosingModal, setShowClosingModal] = useState(false);
+  const [adminView, setAdminView] = useState<AdminTabType>('overview');
 
   // Load initial data
   useEffect(() => {
@@ -49,8 +55,7 @@ const App: React.FC = () => {
     const savedShifts = storage.getShifts();
     const savedCashShifts = storage.getCashShifts();
     const savedRoles = storage.getRoles();
-    const savedName = storage.getRestaurantName();
-    const savedType = storage.getEventType();
+    const savedSettings = storage.getSettings();
 
     setProducts(savedProducts.length > 0 ? savedProducts : INITIAL_PRODUCTS);
     setCategories(savedCategories.length > 0 ? savedCategories : INITIAL_CATEGORIES);
@@ -71,8 +76,7 @@ const App: React.FC = () => {
     setShifts(savedShifts);
     setCashShifts(savedCashShifts);
     setRoles(savedRoles.length > 0 ? savedRoles : ROLES);
-    setRestaurantName(savedName);
-    setEventType(savedType);
+    setSettings(savedSettings);
     setIsLoaded(true);
   }, []);
 
@@ -142,8 +146,7 @@ const App: React.FC = () => {
     setShifts(data.shifts || []);
     setCashShifts(data.cashShifts || []);
     setRoles(data.roles || ROLES);
-    setRestaurantName(data.restaurantName || 'Mi Restaurante');
-    setEventType(data.eventType || 'Evento Gastronómico');
+    setSettings(data.settings || storage.getSettings());
     
     // 3. Limpiar carrito para evitar conflictos con productos viejos
     setCart([]);
@@ -207,6 +210,24 @@ const App: React.FC = () => {
     if (!currentUserRole) return false;
     return currentUserRole.permissions.includes(v);
   };
+
+  // Migrate old roles to new roles
+  useEffect(() => {
+    setRoles(prevRoles => {
+      let needsMigration = false;
+      const updatedRoles = prevRoles.map(role => {
+        if (role.permissions.includes('history') || role.permissions.includes('settings')) {
+          needsMigration = true;
+          return {
+            ...role,
+            permissions: Array.from(new Set(role.permissions.filter(p => p !== 'history' && p !== 'settings').concat('central' as ViewState)))
+          };
+        }
+        return role;
+      });
+      return needsMigration ? updatedRoles : prevRoles;
+    });
+  }, []);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -545,59 +566,58 @@ const App: React.FC = () => {
   };
 
   const recordPayment = (orderId: string, amount: number, method: PaymentMethod, tip: number = 0) => {
-    const orderToPay = orders.find(o => o.id === orderId);
-    if (!orderToPay) return;
+    setOrders(prev => {
+      const orderToPay = prev.find(o => o.id === orderId);
+      if (!orderToPay) return prev;
 
-    setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        const newPayment: PaymentRecord = {
-          id: Math.random().toString(36).substr(2, 9),
-          amount,
-          method,
-          tip,
-          timestamp: new Date().toISOString()
-        };
+      const newPayment: PaymentRecord = {
+        id: Math.random().toString(36).substr(2, 9),
+        amount,
+        method,
+        tip,
+        timestamp: new Date().toISOString()
+      };
 
-        const updatedPayments = [...(o.payments || []), newPayment];
-        const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
-        const allPaid = totalPaid >= o.total;
-
-        return { 
-          ...o, 
-          isPaid: allPaid, 
-          payment: allPaid ? method : o.payment, 
-          status: allPaid ? 'delivered' : o.status,
-          payments: updatedPayments,
-          tip: (o.tip || 0) + tip,
-          items: o.items.map(item => ({ 
-            ...item, 
-            paidQuantity: allPaid ? item.quantity : (item.paidQuantity || 0) + (item.quantity * (amount / o.total))
-          }))
-        };
-      }
-      return o;
-    }));
-
-    if (orderToPay.type === 'dine-in' && orderToPay.table) {
-      const updatedOrder = orders.find(o => o.id === orderId);
-      const updatedPayments = [...(orderToPay.payments || []), { amount }];
+      const updatedPayments = [...(orderToPay.payments || []), newPayment];
       const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
-      if (totalPaid >= orderToPay.total) {
-        setTables(prev => prev.map(t => 
+      const allPaid = totalPaid >= orderToPay.total;
+
+      if (allPaid && orderToPay.type === 'dine-in' && orderToPay.table) {
+        setTables(prevTables => prevTables.map(t => 
           t.name === orderToPay.table ? { ...t, isOccupied: false } : t
         ));
       }
-    }
+
+      return prev.map(o => {
+        if (o.id === orderId) {
+          return { 
+            ...o, 
+            isPaid: allPaid, 
+            payment: allPaid ? method : o.payment, 
+            status: allPaid ? 'delivered' : o.status,
+            payments: updatedPayments,
+            tip: (o.tip || 0) + tip,
+            items: o.items.map(item => ({ 
+              ...item, 
+              paidQuantity: allPaid ? item.quantity : (item.paidQuantity || 0) + (item.quantity * (amount / o.total))
+            }))
+          };
+        }
+        return o;
+      });
+    });
   };
 
-  const payOrder = (orderId: string, payment: PaymentMethod, tip: number = 0) => {
+  const payOrder = (orderId: string, payment: PaymentMethod, tip: number = 0, amount?: number) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
     
     const alreadyPaid = order.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
     const remaining = Math.max(0, order.total - alreadyPaid);
     
-    recordPayment(orderId, remaining, payment, tip);
+    const amountToPay = amount !== undefined ? Math.min(amount, remaining) : remaining;
+    
+    recordPayment(orderId, amountToPay, payment, tip);
   };
 
   const cancelOrder = (orderId: string) => {
@@ -612,11 +632,9 @@ const App: React.FC = () => {
     ));
   };
 
-  const handleUpdateSettings = (name: string, type: string) => {
-    setRestaurantName(name);
-    setEventType(type);
-    storage.saveRestaurantName(name);
-    storage.saveEventType(type);
+  const handleUpdateSettings = (newSettings: StoreSettings) => {
+    setSettings(newSettings);
+    storage.saveSettings(newSettings);
   };
 
   if (!isLoaded) {
@@ -643,8 +661,8 @@ const App: React.FC = () => {
               <Icons.ChefHat />
             </span>
             <div className="leading-tight">
-              <h1 className="text-lg font-black tracking-tighter uppercase whitespace-nowrap">{restaurantName}</h1>
-              <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest">{eventType}</p>
+              <h1 className="text-lg font-black tracking-tighter uppercase whitespace-nowrap">{settings.name}</h1>
+              <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest">{settings.eventType}</p>
             </div>
           </div>
           
@@ -654,6 +672,8 @@ const App: React.FC = () => {
               setView(newView);
               setShowOrdersSlider(false);
             }} 
+            adminView={adminView}
+            onAdminViewChange={setAdminView}
             pendingCount={pendingCount} 
             activeOrdersCount={orders.filter(o => !(o.isPaid && o.status === 'delivered') && o.status !== 'cancelled').length}
             onToggleOrders={() => setShowOrdersSlider(true)}
@@ -705,6 +725,30 @@ const App: React.FC = () => {
               onToggleOrders={() => setShowOrdersSlider(true)}
             />
           )}
+          {view === 'central' && canAccessView('central') && (
+            <AdminCRM 
+              activeTab={adminView}
+              setActiveTab={setAdminView}
+              products={products}
+              categories={categories}
+              tables={tables}
+              orders={orders}
+              cashShifts={cashShifts}
+              users={users}
+              roles={roles}
+              shifts={shifts}
+              settings={settings}
+              hasOpenCashShift={hasOpenCashShift}
+              onUpdateProducts={setProducts}
+              onUpdateCategories={setCategories}
+              onUpdateTables={setTables}
+              onUpdateUsers={setUsers}
+              onUpdateRoles={setRoles}
+              onUpdateSettings={handleUpdateSettings}
+              onRestoreDatabase={restoreDatabase}
+              onCloseCashShift={() => setShowClosingModal(true)}
+            />
+          )}
           {view === 'dispatch' && canAccessView('dispatch') && (
             <DispatchView 
               orders={orders} 
@@ -717,16 +761,7 @@ const App: React.FC = () => {
               onMarkReady={markOrderReady}
               onUpdateTime={updateOrderTime}
               onUpdateItemStatus={updateItemStatus}
-              restaurantName={restaurantName}
-            />
-          )}
-          {view === 'history' && canAccessView('history') && (
-            <HistoryView 
-              orders={orders} 
-              tables={tables}
-              restaurantName={restaurantName} 
-              hasOpenCashShift={hasOpenCashShift}
-              onCloseCashShift={() => setShowClosingModal(true)}
+              restaurantName={settings.name}
             />
           )}
           {view === 'tables' && canAccessView('tables') && (
@@ -741,28 +776,7 @@ const App: React.FC = () => {
               onSplitOrder={splitOrder}
               onCancel={cancelOrder}
               onDeliver={deliverOrder}
-              restaurantName={restaurantName}
-            />
-          )}
-          {view === 'settings' && canAccessView('settings') && (
-            <ProductManagement 
-              products={products} 
-              setProducts={setProducts}
-              categories={categories}
-              setCategories={setCategories}
-              tables={tables}
-              setTables={setTables}
-              orders={orders}
-              setOrders={setOrders}
-              restaurantName={restaurantName}
-              eventType={eventType}
-              onUpdateSettings={handleUpdateSettings}
-              onRestoreDatabase={restoreDatabase}
-              users={users}
-              setUsers={setUsers}
-              shifts={shifts}
-              roles={roles}
-              setRoles={setRoles}
+              restaurantName={settings.name}
             />
           )}
         </div>

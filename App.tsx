@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift, SelectedModifier, CashShift, UserRole, PaymentRecord, StoreSettings } from './types';
+import { Product, Order, ViewState, CartItem, PaymentMethod, Category, Table, OrderType, TakeawayType, OrderStatus, User, Shift, SelectedModifier, CashShift, UserRole, PaymentRecord, StoreSettings, AdminTabType, ComboOption, Ingredient } from './types';
 import { storage } from './services/storage';
 import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, INITIAL_TABLES, INITIAL_USERS, ROLES, Icons } from './constants';
 import POSView from './components/POSView';
@@ -19,6 +19,7 @@ import AdminCRM from './components/AdminCRM';
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('pos');
   const [products, setProducts] = useState<Product[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -48,6 +49,7 @@ const App: React.FC = () => {
   // Load initial data
   useEffect(() => {
     const savedProducts = storage.getProducts();
+    const savedIngredients = (storage as any).getIngredients?.() || [];
     const savedCategories = storage.getCategories();
     const savedTables = storage.getTables();
     const savedOrders = storage.getOrders();
@@ -57,7 +59,16 @@ const App: React.FC = () => {
     const savedRoles = storage.getRoles();
     const savedSettings = storage.getSettings();
 
-    setProducts(savedProducts.length > 0 ? savedProducts : INITIAL_PRODUCTS);
+    const rawProducts = savedProducts.length > 0 ? savedProducts : INITIAL_PRODUCTS;
+    const cleanedProducts = rawProducts.map((p: any) => ({
+      ...p,
+      modifierGroups: p.modifierGroups?.filter((mg: any) => 
+        !mg.name.toLowerCase().includes('término') && 
+        !mg.name.toLowerCase().includes('meat')
+      )
+    }));
+    setProducts(cleanedProducts);
+    setIngredients(savedIngredients);
     setCategories(savedCategories.length > 0 ? savedCategories : INITIAL_CATEGORIES);
     setTables(savedTables.length > 0 ? savedTables : INITIAL_TABLES);
     const migratedOrders = savedOrders.map((o: any) => ({
@@ -84,6 +95,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isLoaded) storage.saveProducts(products);
   }, [products, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && (storage as any).saveIngredients) (storage as any).saveIngredients(ingredients);
+  }, [ingredients, isLoaded]);
 
   useEffect(() => {
     if (isLoaded) storage.saveCategories(categories);
@@ -328,9 +343,13 @@ const App: React.FC = () => {
     if (!hasOpenCashShift && (currentUser?.role === 'Admin' || currentUser?.role === 'Caja')) {
       alert('Debes abrir la caja antes de tomar pedidos.');
       // Switch view to cash audit if possible or show modal
-      setView('history'); // We'll assume history or a new view for cash audit
+      setView('history');
       return;
     }
+    
+    // Check stock if needed (Advanced: could warn if stock is low)
+    // For now, we just discount on order creation
+    
     setCart(prev => {
       const modifierKey = selectedModifiers ? JSON.stringify(selectedModifiers) : '';
       const comboKey = JSON.stringify(selectedComboOptions || []);
@@ -387,6 +406,44 @@ const App: React.FC = () => {
     ));
   };
 
+  const discountStock = (cartItems: CartItem[]) => {
+    setIngredients(prev => {
+      const newIngredients = [...prev];
+      cartItems.forEach(item => {
+        // Original product recipe
+        const originalProduct = products.find(p => p.id === item.id);
+        if (originalProduct?.recipe) {
+          originalProduct.recipe.forEach(ri => {
+            const ingIndex = newIngredients.findIndex(i => i.id === ri.ingredientId);
+            if (ingIndex !== -1) {
+              newIngredients[ingIndex] = { 
+                ...newIngredients[ingIndex], 
+                stock: newIngredients[ingIndex].stock - (ri.quantity * item.quantity) 
+              };
+            }
+          });
+        }
+
+        // Selected modifiers recipes
+        item.selectedModifiers?.forEach(sm => {
+          const modifier = originalProduct?.modifierGroups?.flatMap(g => g.modifiers).find(m => m.id === sm.modifierId);
+          if (modifier?.recipe) {
+            modifier.recipe.forEach(ri => {
+              const ingIndex = newIngredients.findIndex(i => i.id === ri.ingredientId);
+              if (ingIndex !== -1) {
+                newIngredients[ingIndex] = { 
+                  ...newIngredients[ingIndex], 
+                  stock: newIngredients[ingIndex].stock - (ri.quantity * item.quantity) 
+                };
+              }
+            });
+          }
+        });
+      });
+      return newIngredients;
+    });
+  };
+
   const createOrder = (
     client: string, 
     table: string, 
@@ -396,6 +453,9 @@ const App: React.FC = () => {
   ) => {
     if (cart.length === 0) return;
 
+    // Discount stock before clearing cart
+    discountStock(cart);
+
     const finalClient = client.trim() === '' ? 'Mostrador' : client;
     const finalTable = table.trim() === '' ? 'Mostrador' : table;
 
@@ -403,7 +463,7 @@ const App: React.FC = () => {
     
     // Check if it's a dine-in order and if there's already an open order for this table
     if (type === 'dine-in' && finalTable !== 'Mostrador') {
-      const existingOrder = orders.find(o => o.table === finalTable && o.type === 'dine-in' && !o.isPaid);
+      const existingOrder = orders.find(o => o.table === finalTable && o.type === 'dine-in' && !o.isPaid && o.status !== 'cancelled');
       if (existingOrder) {
         // Add items to existing order
         setOrders(prev => prev.map(o => {
@@ -629,9 +689,17 @@ const App: React.FC = () => {
   };
 
   const cancelOrder = (orderId: string) => {
-    setOrders(prev => prev.map(o => 
-      o.id === orderId ? { ...o, status: 'cancelled' } : o
-    ));
+    setOrders(prev => {
+      const order = prev.find(o => o.id === orderId);
+      if (order && order.type === 'dine-in' && order.table) {
+        setTables(prevTables => prevTables.map(t => 
+          t.name === order.table ? { ...t, isOccupied: false } : t
+        ));
+      }
+      return prev.map(o => 
+        o.id === orderId ? { ...o, status: 'cancelled' } : o
+      );
+    });
   };
 
   const transferOrder = (orderId: string, newTable: string) => {
@@ -755,6 +823,8 @@ const App: React.FC = () => {
               onUpdateSettings={handleUpdateSettings}
               onRestoreDatabase={restoreDatabase}
               onCloseCashShift={() => setShowClosingModal(true)}
+              ingredients={ingredients}
+              setIngredients={setIngredients}
             />
           )}
           {view === 'dispatch' && canAccessView('dispatch') && (

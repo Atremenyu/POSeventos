@@ -1,5 +1,5 @@
 
-import { Product, Order, Category, Table, User, Shift, CashShift, UserRole, StoreSettings } from '../types';
+import { Product, Order, Category, Table, User, Shift, CashShift, UserRole, StoreSettings, Ingredient } from '../types';
 
 const KEYS = {
   PRODUCTS: 'comanda_productos',
@@ -13,6 +13,7 @@ const KEYS = {
   SHIFTS: 'comanda_turnos',
   CASH_SHIFTS: 'comanda_turnos_caja',
   ROLES: 'comanda_roles',
+  INGREDIENTS: 'comanda_ingredientes',
 };
 
 export const storage = {
@@ -102,5 +103,12 @@ export const storage = {
   },
   saveEventType: (type: string) => {
     localStorage.setItem(KEYS.EVENT_TYPE, type);
+  },
+  getIngredients: (): Ingredient[] => {
+    const data = localStorage.getItem(KEYS.INGREDIENTS);
+    return data ? JSON.parse(data) : [];
+  },
+  saveIngredients: (ingredients: Ingredient[]) => {
+    localStorage.setItem(KEYS.INGREDIENTS, JSON.stringify(ingredients));
   },
 };

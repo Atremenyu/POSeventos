@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Icons } from '../constants';
-import { Product, Table, Order, CashShift, User, UserRole, Shift, StoreSettings, AdminTabType } from '../types';
+import { Product, Table, Order, CashShift, User, UserRole, Shift, StoreSettings, AdminTabType, Ingredient } from '../types';
 import ProductManagement from './ProductManagement';
 import HistoryView from './HistoryView';
 import CashShiftView from './CashShiftView';
@@ -27,6 +27,8 @@ interface AdminCRMProps {
   onUpdateSettings: (settings: StoreSettings) => void;
   onRestoreDatabase: (data: any) => void;
   onCloseCashShift: () => void;
+  ingredients: Ingredient[];
+  setIngredients: React.Dispatch<React.SetStateAction<Ingredient[]>>;
 }
 
 const AdminCRM: React.FC<AdminCRMProps> = ({
@@ -49,7 +51,9 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
   onUpdateRoles,
   onUpdateSettings,
   onRestoreDatabase,
-  onCloseCashShift
+  onCloseCashShift,
+  ingredients,
+  setIngredients
 }) => {
 
   // Integrated ProductManagement wrapper or just pass the props
@@ -177,6 +181,7 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
         );
       case 'products':
       case 'categories':
+      case 'inventory':
       case 'tables':
       case 'users':
       case 'roles':
@@ -201,7 +206,9 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
               shifts={shifts}
               roles={roles}
               setRoles={onUpdateRoles as any}
-              activeTab={activeTab}
+              ingredients={ingredients}
+              setIngredients={setIngredients}
+              activeTab={activeTab as any}
             />
           </div>
         );
@@ -249,6 +256,7 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
             { id: 'overview', label: 'Dashboard', icon: <Icons.Activity size={18} /> },
             { id: 'history', label: 'Ventas', icon: <Icons.TrendingUp size={18} /> },
             { id: 'cash', label: 'Cierres de Caja', icon: <Icons.Lock size={18} /> },
+            { id: 'inventory', label: 'Inventario', icon: <Icons.Package size={18} /> },
             { id: 'products', label: 'Productos', icon: <Icons.Package size={18} /> },
             { id: 'categories', label: 'Categorías', icon: <Icons.Tag size={18} /> },
             { id: 'tables', label: 'Mesas', icon: <Icons.Layers size={18} /> },

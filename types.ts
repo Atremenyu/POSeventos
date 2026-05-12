@@ -1,10 +1,24 @@
 
 export type Category = string;
 
+export interface Ingredient {
+  id: string;
+  name: string;
+  stock: number;
+  minStock: number;
+  unit: 'g';
+}
+
+export interface RecipeItem {
+  ingredientId: string;
+  quantity: number;
+}
+
 export interface Modifier {
   id: string;
   name: string;
   extraPrice: number;
+  recipe?: RecipeItem[];
 }
 
 export interface ModifierGroup {
@@ -24,6 +38,7 @@ export interface Product {
   modifierGroups?: ModifierGroup[];
   hasCombo?: boolean;
   comboOptions?: ComboOption[];
+  recipe?: RecipeItem[];
 }
 
 export interface ComboOption {
@@ -122,7 +137,7 @@ export interface StoreSettings {
 }
 
 export type ViewState = 'pos' | 'dispatch' | 'central' | 'tables' | 'login' | 'cash_audit';
-export type AdminTabType = 'overview' | 'history' | 'cash' | 'products' | 'categories' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
+export type AdminTabType = 'overview' | 'history' | 'cash' | 'products' | 'categories' | 'inventory' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
 
 export interface UserRole {
   name: string;

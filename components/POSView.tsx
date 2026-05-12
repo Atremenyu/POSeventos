@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CartItem, Category, PaymentMethod, Order, OrderType, TakeawayType, Table, SelectedModifier } from '../types';
+import { Product, CartItem, Category, PaymentMethod, Order, OrderType, TakeawayType, Table, SelectedModifier, ComboOption } from '../types';
 import { Icons } from '../constants';
 import ModifierModal from './ModifierModal';
 import ComboModal from './ComboModal';
@@ -126,7 +126,7 @@ const POSView: React.FC<POSViewProps> = ({
 
   const existingOrder = useMemo(() => {
     if (orderType !== 'dine-in' || !table.trim()) return null;
-    return orders.find(o => o.table === table && o.type === 'dine-in' && !o.isPaid);
+    return orders.find(o => o.table === table && o.type === 'dine-in' && !o.isPaid && o.status !== 'cancelled');
   }, [orders, table, orderType]);
 
   const handleCheckoutSubmit = () => {

@@ -54,7 +54,7 @@ const TablesView: React.FC<TablesViewProps> = ({
   );
 
   const getTableStatus = (table: Table) => {
-    const activeOrder = orders.find(o => o.table === table.name && o.type === 'dine-in' && !o.isPaid);
+    const activeOrder = orders.find(o => o.table === table.name && o.type === 'dine-in' && !o.isPaid && o.status !== 'cancelled');
     if (activeOrder) return { status: 'occupied', order: activeOrder };
     return { status: 'free', order: null };
   };

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Product, Category, Order, Table, User, Shift, UserRole, ViewState, StoreSettings, ComboOption } from '../types';
+import { Product, Category, Order, Table, User, Shift, UserRole, ViewState, StoreSettings, ComboOption, ModifierGroup, Modifier, Ingredient, RecipeItem } from '../types';
 import { Icons } from '../constants';
 
 interface ProductManagementProps {
@@ -20,8 +20,10 @@ interface ProductManagementProps {
   shifts: Shift[];
   roles: UserRole[];
   setRoles: React.Dispatch<React.SetStateAction<UserRole[]>>;
-  initialTab?: 'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts' | 'roles';
-  activeTab?: 'overview' | 'history' | 'products' | 'categories' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
+  ingredients: Ingredient[];
+  setIngredients: React.Dispatch<React.SetStateAction<Ingredient[]>>;
+  initialTab?: 'products' | 'categories' | 'tables' | 'general' | 'users' | 'shifts' | 'roles' | 'inventory';
+  activeTab?: 'overview' | 'history' | 'products' | 'categories' | 'inventory' | 'tables' | 'users' | 'roles' | 'shifts' | 'general';
 }
 
 interface BackupPreview {
@@ -53,6 +55,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   shifts,
   roles,
   setRoles,
+  ingredients,
+  setIngredients,
   activeTab = 'products'
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,9 +76,9 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   };
 
   const exportProductsToCSV = () => {
-    const header = "id,name,price,category,hasCombo,comboOptionsSerialized\n";
+    const header = "id,name,price,category,hasCombo,comboOptionsSerialized,modifierGroupsSerialized\n";
     const rows = products.map(p => 
-      `${p.id},"${p.name.replace(/"/g, '""')}",${p.price},"${p.category.replace(/"/g, '""')}",${!!p.hasCombo},"${JSON.stringify(p.comboOptions || []).replace(/"/g, '""')}"`
+      `${p.id},"${p.name.replace(/"/g, '""')}",${p.price},"${p.category.replace(/"/g, '""')}",${!!p.hasCombo},"${JSON.stringify(p.comboOptions || []).replace(/"/g, '""')}","${JSON.stringify(p.modifierGroups || []).replace(/"/g, '""')}"`
     ).join("\n");
     downloadCSV(header + rows, "productos.csv");
   };
@@ -87,9 +91,15 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
         const text = event.target?.result as string;
         const lines = text.split('\n').filter(l => l.trim()).slice(1);
         const newProducts: Product[] = lines.map(line => {
-            const [id, name, price, category, hasCombo, comboOptionsSerialized] = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/^"|"$/g, '').replace(/""/g, '"'));
+            const [id, name, price, category, hasCombo, comboOptionsSerialized, modifierGroupsSerialized] = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s ? s.replace(/^"|"$/g, '').replace(/""/g, '"') : '');
             return {
-                id, name, price: Number(price), category, hasCombo: hasCombo === 'true', comboOptions: JSON.parse(comboOptionsSerialized || '[]')
+                id, 
+                name, 
+                price: Number(price), 
+                category, 
+                hasCombo: hasCombo === 'true', 
+                comboOptions: JSON.parse(comboOptionsSerialized || '[]'),
+                modifierGroups: JSON.parse(modifierGroupsSerialized || '[]')
             };
         });
         setProducts(newProducts);
@@ -156,11 +166,44 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const [category, setCategory] = useState<Category>('');
   const [hasCombo, setHasCombo] = useState(false);
   const [comboOptions, setComboOptions] = useState<ComboOption[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [recipe, setRecipe] = useState<RecipeItem[]>([]);
+
+  // Modifiers Form State
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupRequired, setNewGroupRequired] = useState(false);
+  const [newGroupMax, setNewGroupMax] = useState(1);
+  const [newModifierName, setNewModifierName] = useState('');
+  const [newModifierPrice, setNewModifierPrice] = useState(0);
+  const [newModifierRecipe, setNewModifierRecipe] = useState<RecipeItem[]>([]);
+  const [activeGroupIndex, setActiveGroupIndex] = useState<number | null>(null);
+  const [activeTabState, setActiveTabState] = useState(activeTab);
+
+  // Reset state when tab changes
+  useEffect(() => {
+    setIsAdding(false);
+    setEditingId(null);
+    resetProductForm();
+    resetIngredientForm();
+    resetUserForm();
+    setRoleFormName('');
+    setRoleFormPermissions([]);
+  }, [activeTab]);
 
   // Category Form State
   const [newCatName, setNewCatName] = useState('');
   const [newComboOptionLabel, setNewComboOptionLabel] = useState('');
   const [newComboOptionPrice, setNewComboOptionPrice] = useState(0);
+
+  // Ingredient Form State
+  const [ingName, setIngName] = useState('');
+  const [ingStock, setIngStock] = useState(0);
+  const [ingMinStock, setIngMinStock] = useState(0);
+  const [ingUnit, setIngUnit] = useState<'g' | 'unit' | 'ml'>('g');
+
+  // Recipe Selection State
+  const [recipeIngId, setRecipeIngId] = useState('');
+  const [recipeQty, setRecipeQty] = useState(0);
 
   // Table Form State
   const [newTableName, setNewTableName] = useState('');
@@ -173,21 +216,22 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const handleSaveProduct = () => {
     if (!name || price <= 0 || !category) return;
 
+    const cleanProduct: Product = {
+      id: editingId || Date.now().toString(),
+      name,
+      price,
+      category,
+      hasCombo,
+      comboOptions: hasCombo ? comboOptions : undefined,
+      modifierGroups: modifierGroups.length > 0 ? modifierGroups : undefined,
+      recipe: recipe.length > 0 ? recipe : undefined
+    };
+
     if (editingId) {
-      setProducts(prev => prev.map(p => 
-        p.id === editingId ? { ...p, name, price, category, hasCombo, comboOptions: hasCombo ? comboOptions : undefined } : p
-      ));
+      setProducts(prev => prev.map(p => p.id === editingId ? cleanProduct : p));
       setEditingId(null);
     } else {
-      const newProduct: Product = {
-        id: Date.now().toString(),
-        name,
-        price,
-        category,
-        hasCombo,
-        comboOptions: hasCombo ? comboOptions : undefined
-      };
-      setProducts(prev => [...prev, newProduct]);
+      setProducts(prev => [...prev, cleanProduct]);
       setIsAdding(false);
     }
     resetProductForm();
@@ -252,6 +296,152 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     setCategory(categories[0] || '');
     setHasCombo(false);
     setComboOptions([]);
+    setModifierGroups([]);
+    setRecipe([]);
+    setActiveGroupIndex(null);
+    setNewGroupName('');
+  };
+
+  const addModifierGroup = () => {
+    if (!newGroupName.trim()) return;
+    const newGroup: ModifierGroup = {
+      id: Date.now().toString(),
+      name: newGroupName,
+      minSelection: newGroupRequired ? 1 : 0,
+      maxSelection: newGroupMax,
+      isRequired: newGroupRequired,
+      modifiers: []
+    };
+    setModifierGroups(prev => [...prev, newGroup]);
+    setNewGroupName('');
+    setNewGroupRequired(false);
+    setNewGroupMax(1);
+  };
+
+  const addModifierToGroup = (groupIndex: number) => {
+    if (!newModifierName.trim()) return;
+    setModifierGroups(prev => prev.map((group, idx) => {
+      if (idx !== groupIndex) return group;
+      return {
+        ...group,
+        modifiers: [...group.modifiers, {
+          id: Date.now().toString(),
+          name: newModifierName,
+          extraPrice: newModifierPrice,
+          recipe: newModifierRecipe
+        }]
+      };
+    }));
+    setNewModifierName('');
+    setNewModifierPrice(0);
+    setNewModifierRecipe([]);
+  };
+
+  const removeModifier = (groupIndex: number, modId: string) => {
+    setModifierGroups(prev => prev.map((group, idx) => {
+      if (idx !== groupIndex) return group;
+      return { ...group, modifiers: group.modifiers.filter(m => m.id !== modId) };
+    }));
+  };
+
+  const removeGroup = (idx: number) => {
+    setModifierGroups(prev => prev.filter((_, i) => i !== idx));
+    if (activeGroupIndex === idx) setActiveGroupIndex(null);
+  };
+
+  const addIngredientToRecipe = () => {
+    if (!recipeIngId || recipeQty <= 0) return;
+    setRecipe(prev => {
+      const existing = prev.find(r => r.ingredientId === recipeIngId);
+      if (existing) {
+        return prev.map(r => r.ingredientId === recipeIngId ? { ...r, quantity: recipeQty } : r);
+      }
+      return [...prev, { ingredientId: recipeIngId, quantity: recipeQty }];
+    });
+    setRecipeIngId('');
+    setRecipeQty(0);
+  };
+
+  const removeIngredientFromRecipe = (id: string) => {
+    setRecipe(prev => prev.filter(r => r.ingredientId !== id));
+  };
+
+  const handleSaveIngredient = () => {
+    if (!ingName || ingStock < 0) return;
+    
+    if (editingId) {
+      setIngredients(prev => prev.map(i => i.id === editingId ? { ...i, name: ingName, stock: ingStock, minStock: ingMinStock, unit: ingUnit } : i));
+      setEditingId(null);
+    } else {
+      const newIng: Ingredient = {
+        id: Date.now().toString(),
+        name: ingName,
+        stock: ingStock,
+        minStock: ingMinStock,
+        unit: ingUnit
+      };
+      setIngredients(prev => [...prev, newIng]);
+      setIsAdding(false);
+    }
+    resetIngredientForm();
+  };
+
+  const resetIngredientForm = () => {
+    setIngName('');
+    setIngStock(0);
+    setIngMinStock(0);
+    setIngUnit('g');
+  };
+
+  const startEditIngredient = (i: Ingredient) => {
+    setEditingId(i.id);
+    setIngName(i.name);
+    setIngStock(i.stock);
+    setIngMinStock(i.minStock);
+    setIngUnit(i.unit || 'g');
+    setIsAdding(false);
+  };
+
+  const deleteIngredient = (id: string) => {
+    const ing = ingredients.find(i => i.id === id);
+    if (!ing) return;
+    
+    const inUse = products.some(p => p.recipe?.some(r => r.ingredientId === id));
+    if (inUse) {
+      alert(`El ingrediente "${ing.name}" está siendo usado en una o más recetas.`);
+      return;
+    }
+
+    triggerConfirm(
+      'Eliminar Ingrediente',
+      `¿Eliminar "${ing.name}" del catálogo?`,
+      () => setIngredients(prev => prev.filter(i => i.id !== id))
+    );
+  };
+
+  const exportIngredientsToCSV = () => {
+    const header = "id,name,stock,minStock,unit\n";
+    const rows = ingredients.map(i => `${i.id},"${i.name.replace(/"/g, '""')}",${i.stock},${i.minStock},${i.unit}`).join("\n");
+    downloadCSV(header + rows, "inventario.csv");
+  };
+
+  const handleImportIngredients = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(l => l.trim()).slice(1);
+        const newIngs: Ingredient[] = lines.map(line => {
+            const [id, name, stock, minStock, unit] = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s ? s.replace(/^"|"$/g, '').replace(/""/g, '"') : '');
+            return {
+                id, name, stock: Number(stock), minStock: Number(minStock), unit: (unit as any) || 'g'
+            };
+        });
+        setIngredients(newIngs);
+        alert(`${newIngs.length} ingredientes importados.`);
+    };
+    reader.readAsText(file);
   };
 
   const handleAddComboOption = () => {
@@ -324,6 +514,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
     setCategory(p.category);
     setHasCombo(!!p.hasCombo);
     setComboOptions(p.comboOptions || []);
+    setModifierGroups(p.modifierGroups || []);
+    setRecipe(p.recipe || []);
     setIsAdding(false);
   };
 
@@ -501,6 +693,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                 </button>
                 <button 
                   onClick={() => {
+                    setEditingId(null);
                     setIsAdding(true);
                     if (categories.length > 0) setCategory(categories[0]);
                   }}
@@ -564,6 +757,206 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Recipe Section */}
+                <div className="space-y-4 sm:col-span-3 border-t pt-6">
+                  <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div>
+                      <h4 className="font-black text-slate-900 uppercase tracking-tighter text-sm">Receta / Insumos (Gramos)</h4>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ingredientes que se descuentan del inventario</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 mb-4">
+                    <div className="flex-1">
+                      <select 
+                        value={recipeIngId} onChange={e => setRecipeIngId(e.target.value)}
+                        className="w-full p-3 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-600 outline-none"
+                      >
+                        <option value="">Seleccionar ingrediente...</option>
+                        {ingredients.map(ing => (
+                          <option key={ing.id} value={ing.id}>{ing.name} (Stock: {ing.stock}g)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full md:w-32">
+                      <input 
+                        type="number" placeholder="Gramos" value={recipeQty} onChange={e => setRecipeQty(Number(e.target.value))}
+                        className="w-full p-3 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-600 outline-none"
+                      />
+                    </div>
+                    <button 
+                      onClick={addIngredientToRecipe}
+                      className="bg-black text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition"
+                    >
+                      Añadir a Receta
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {recipe.map(item => {
+                      const ing = ingredients.find(i => i.id === item.ingredientId);
+                      return (
+                        <div key={item.ingredientId} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                          <div>
+                            <p className="text-[10px] font-black text-slate-900 uppercase">{ing?.name || 'Desconocido'}</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase">{item.quantity} gramos</p>
+                          </div>
+                          <button onClick={() => removeIngredientFromRecipe(item.ingredientId)} className="text-slate-300 hover:text-red-600 transition">
+                            <Icons.Trash size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {recipe.length === 0 && (
+                      <div className="col-span-full py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl opacity-50">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin ingredientes asociados</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Modifiers Support Section */}
+                <div className="space-y-4 sm:col-span-3 border-t pt-6 mt-4">
+                  <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div>
+                      <h4 className="font-black text-slate-900 uppercase tracking-tighter text-sm">Grupos de Modificadores</h4>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Extras o ingredientes a remover</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Add Group Column */}
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                      <h5 className="text-[10px] font-black text-slate-600 uppercase tracking-widest border-b pb-2">Crear Nuevo Grupo</h5>
+                      <div className="space-y-3">
+                         <input 
+                          type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                          placeholder="Nombre del Grupo (ej. Ingredientes Extra)"
+                          className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-600 outline-none"
+                         />
+                         <div className="flex items-center justify-between">
+                            <label className="flex items-center space-x-2 text-[10px] font-black text-slate-500 uppercase cursor-pointer">
+                              <input type="checkbox" checked={newGroupRequired} onChange={e => setNewGroupRequired(e.target.checked)} className="rounded text-red-600" />
+                              <span>¿Es Obligatorio?</span>
+                            </label>
+                            <div className="flex items-center space-x-2">
+                               <span className="text-[10px] font-black text-slate-500 uppercase">Máx Selec.</span>
+                               <input 
+                                type="number" min={1} value={newGroupMax} onChange={e => setNewGroupMax(Number(e.target.value))}
+                                className="w-14 p-2 rounded-lg border border-slate-200 text-xs"
+                               />
+                            </div>
+                         </div>
+                         <button 
+                          onClick={addModifierGroup}
+                          className="w-full py-2.5 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition"
+                         >
+                           Añadir Grupo
+                         </button>
+                      </div>
+                    </div>
+
+                    {/* Preview/Edit Groups Column */}
+                    <div className="space-y-3">
+                      {modifierGroups.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 opacity-50">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sin modificadores</p>
+                        </div>
+                      ) : (
+                        modifierGroups.map((group, gIdx) => (
+                          <div key={group.id} className={`p-4 rounded-2xl border-2 transition-all ${activeGroupIndex === gIdx ? 'border-red-600 bg-red-50/30' : 'border-slate-100 bg-white'}`}>
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <h6 className="font-black text-slate-900 uppercase tracking-tight text-xs flex items-center">
+                                  {group.name}
+                                  {group.isRequired && <span className="ml-2 text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">OBLIGATORIO</span>}
+                                </h6>
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Máx. {group.maxSelection} opciones</p>
+                              </div>
+                              <div className="flex space-x-1">
+                                <button onClick={() => setActiveGroupIndex(activeGroupIndex === gIdx ? null : gIdx)} className="p-1.5 text-slate-400 hover:text-black">
+                                  <Icons.Edit size={14}/>
+                                </button>
+                                <button onClick={() => removeGroup(gIdx)} className="p-1.5 text-slate-400 hover:text-red-600">
+                                  <Icons.Trash size={14}/>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Modifiers List in Group */}
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {group.modifiers.map(mod => (
+                                <span key={mod.id} className="inline-flex items-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-tighter shadow-sm">
+                                  {mod.name} {mod.extraPrice > 0 && <span className="ml-1 text-green-600">(+${mod.extraPrice})</span>}
+                                  <button onClick={() => removeModifier(gIdx, mod.id)} className="ml-2 text-slate-300 hover:text-red-600">×</button>
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* Add Modifier to Group Form */}
+                            {activeGroupIndex === gIdx && (
+                              <div className="mt-3 p-3 bg-white rounded-xl border border-red-100 space-y-3 animate-in slide-in-from-top-2">
+                                <div className="flex gap-2">
+                                  <input 
+                                    type="text" placeholder="Nombre Modif." value={newModifierName} onChange={e => setNewModifierName(e.target.value)}
+                                    className="flex-1 p-2 rounded-lg border border-slate-200 text-[10px] focus:ring-1 focus:ring-red-600 outline-none"
+                                  />
+                                  <input 
+                                    type="number" placeholder="$ Extra" value={newModifierPrice} onChange={e => setNewModifierPrice(Number(e.target.value))}
+                                    className="w-16 p-2 rounded-lg border border-slate-200 text-[10px] focus:ring-1 focus:ring-red-600 outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                   <p className="text-[8px] font-black uppercase text-slate-400 mb-1">Receta Modificador</p>
+                                   <div className="flex gap-1">
+                                      <select 
+                                        className="flex-1 p-1.5 rounded bg-white border border-slate-200 text-[10px] outline-none"
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          if(!val) return;
+                                          if(!newModifierRecipe.find(r => r.ingredientId === val)) {
+                                            setNewModifierRecipe([...newModifierRecipe, { ingredientId: val, quantity: 0 }]);
+                                          }
+                                        }}
+                                        value=""
+                                      >
+                                        <option value="">+ Añadir Insumo...</option>
+                                        {ingredients.map(ing => (
+                                          <option key={ing.id} value={ing.id}>{ing.name}</option>
+                                        ))}
+                                      </select>
+                                   </div>
+                                   <div className="space-y-1">
+                                      {newModifierRecipe.map(ri => {
+                                        const ing = ingredients.find(i => i.id === ri.ingredientId);
+                                        return (
+                                          <div key={ri.ingredientId} className="flex items-center justify-between gap-2">
+                                            <span className="text-[9px] font-bold text-slate-600 truncate">{ing?.name}</span>
+                                            <div className="flex items-center gap-1">
+                                              <input 
+                                                type="number" 
+                                                className="w-10 p-1 rounded border border-slate-200 text-[9px]" 
+                                                value={ri.quantity} 
+                                                onChange={(e) => setNewModifierRecipe(prev => prev.map(r => r.ingredientId === ri.ingredientId ? { ...r, quantity: Number(e.target.value) } : r))}
+                                              />
+                                              <span className="text-[8px] text-slate-400">g</span>
+                                              <button onClick={() => setNewModifierRecipe(prev => prev.filter(r => r.ingredientId !== ri.ingredientId))} className="text-red-400 hover:text-red-600">×</button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                   </div>
+                                </div>
+                                <button onClick={() => addModifierToGroup(gIdx)} className="w-full bg-red-600 text-white p-2 rounded-lg text-[10px] font-black uppercase tracking-widest">Añadir Modificador</button>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-8 flex justify-end space-x-3">
                 <button 
@@ -610,6 +1003,132 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'inventory' && (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Inventario de Insumos</h2>
+            {!isAdding && !editingId && (
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={exportIngredientsToCSV}
+                  className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+                >
+                  Exportar
+                </button>
+                <input type="file" id="ingImport" onChange={handleImportIngredients} accept=".csv" className="hidden" />
+                <button 
+                  onClick={() => document.getElementById('ingImport')?.click()}
+                  className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition"
+                >
+                  Importar
+                </button>
+                <button 
+                  onClick={() => { setEditingId(null); setIsAdding(true); resetIngredientForm(); }}
+                  className="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-red-700 transition"
+                >
+                  <Icons.Plus /> <span>Nuevo Insumo</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {(isAdding || editingId) && (
+            <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
+              <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Insumo</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+                <div className="space-y-1 sm:col-span-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Insumo</label>
+                  <input 
+                    type="text" value={ingName} onChange={e => setIngName(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                    placeholder="Ej. Mezcla Carne Al Pastor"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidad</label>
+                  <select 
+                    value={ingUnit} onChange={e => setIngUnit(e.target.value as any)}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                  >
+                    <option value="g">Gramos (g)</option>
+                    <option value="ml">Mililitros (ml)</option>
+                    <option value="unit">Unidades (unit)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Actual</label>
+                  <input 
+                    type="number" value={ingStock} onChange={e => setIngStock(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alerta Stock Bajo</label>
+                  <input 
+                    type="number" value={ingMinStock} onChange={e => setIngMinStock(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="mt-8 flex justify-end space-x-3 text-xs">
+                <button 
+                  onClick={() => { setIsAdding(false); setEditingId(null); }}
+                  className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveIngredient}
+                  className="px-10 py-2 bg-black text-white rounded-xl font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Insumo</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Alerta</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {ingredients.map(ing => (
+                  <tr key={ing.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-slate-900 uppercase text-xs tracking-tight">{ing.name}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className={`text-xs font-black ${ing.stock <= ing.minStock ? 'text-red-600 animate-pulse' : 'text-green-600'}`}>
+                          {ing.stock} {ing.unit || 'g'}
+                        </span>
+                        {ing.stock <= ing.minStock && <span className="text-[8px] font-black uppercase text-red-400">¡Bajo Stock!</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-xs text-slate-500 font-bold">{ing.minStock}{ing.unit || 'g'}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end space-x-1">
+                        <button onClick={() => startEditIngredient(ing)} className="p-2 text-slate-400 hover:text-red-600 transition"><Icons.Edit size={16}/></button>
+                        <button onClick={() => deleteIngredient(ing.id)} className="p-2 text-slate-400 hover:text-black transition"><Icons.Trash size={16}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {ingredients.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-slate-400 uppercase text-xs font-black tracking-widest opacity-50">No hay insumos registrados</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -715,7 +1234,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Gestión de Usuarios</h2>
             {!isAdding && !editingId && (
               <button 
-                onClick={() => setIsAdding(true)}
+                onClick={() => { setEditingId(null); setIsAdding(true); }}
                 className="bg-red-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest flex items-center space-x-2 hover:bg-red-700 transition shadow-lg shadow-red-100"
               >
                 <Icons.Plus /> <span>Nuevo Usuario</span>
@@ -877,6 +1396,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
             {!isAdding && !editingId && (
               <button 
                 onClick={() => {
+                  setEditingId(null);
                   setIsAdding(true);
                   setRoleFormName('');
                   setRoleFormPermissions([]);

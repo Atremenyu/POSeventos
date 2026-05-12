@@ -172,7 +172,7 @@ const ModifierModal: React.FC<ModifierModalProps> = ({ product, onClose, onConfi
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej: Término medio, extra servilletas, etc..."
+              placeholder="Ej: Extra salsa, sin cebolla, etc..."
               className="w-full h-32 p-4 rounded-3xl border-2 border-slate-100 focus:border-red-600 focus:ring-0 transition-all font-medium text-slate-600 resize-none"
             />
           </div>

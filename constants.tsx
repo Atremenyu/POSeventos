@@ -27,39 +27,27 @@ export const INITIAL_PRODUCTS: Product[] = [
     modifierGroups: [
       {
         id: 'mg1',
-        name: 'Término de la Carne',
-        minSelection: 1,
-        maxSelection: 1,
-        isRequired: true,
-        modifiers: [
-          { id: 'm1', name: 'Término 1/2', extraPrice: 0 },
-          { id: 'm2', name: 'Término 3/4', extraPrice: 0 },
-          { id: 'm3', name: 'Bien Cocida', extraPrice: 0 },
-        ]
-      },
-      {
-        id: 'mg2',
         name: 'Ingredientes Extra',
         minSelection: 0,
         maxSelection: 5,
         isRequired: false,
         modifiers: [
-          { id: 'm4', name: 'Extra Queso', extraPrice: 50 },
-          { id: 'm5', name: 'Extra Tocino', extraPrice: 120 },
-          { id: 'm6', name: 'Huevo Estrellado', extraPrice: 80 },
-          { id: 'm7', name: 'Aguacate', extraPrice: 100 },
+          { id: 'm1', name: 'Extra Queso', extraPrice: 50 },
+          { id: 'm2', name: 'Extra Tocino', extraPrice: 120 },
+          { id: 'm3', name: 'Huevo Estrellado', extraPrice: 80 },
+          { id: 'm4', name: 'Aguacate', extraPrice: 100 },
         ]
       },
       {
-        id: 'mg3',
+        id: 'mg2',
         name: 'Remover Ingredientes',
         minSelection: 0,
         maxSelection: 10,
         isRequired: false,
         modifiers: [
-          { id: 'm8', name: 'Sin Cebolla', extraPrice: 0 },
-          { id: 'm9', name: 'Sin Tomate', extraPrice: 0 },
-          { id: 'm10', name: 'Sin Pepinillos', extraPrice: 0 },
+          { id: 'm5', name: 'Sin Cebolla', extraPrice: 0 },
+          { id: 'm6', name: 'Sin Tomate', extraPrice: 0 },
+          { id: 'm7', name: 'Sin Pepinillos', extraPrice: 0 },
         ]
       }
     ]

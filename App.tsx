@@ -49,7 +49,7 @@ const App: React.FC = () => {
   // Load initial data
   useEffect(() => {
     const savedProducts = storage.getProducts();
-    const savedIngredients = (storage as any).getIngredients?.() || [];
+    const savedIngredients = storage.getIngredients() || [];
     const savedCategories = storage.getCategories();
     const savedTables = storage.getTables();
     const savedOrders = storage.getOrders();
@@ -97,7 +97,7 @@ const App: React.FC = () => {
   }, [products, isLoaded]);
 
   useEffect(() => {
-    if (isLoaded && (storage as any).saveIngredients) (storage as any).saveIngredients(ingredients);
+    if (isLoaded) storage.saveIngredients(ingredients);
   }, [ingredients, isLoaded]);
 
   useEffect(() => {

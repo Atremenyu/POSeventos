@@ -1,0 +1,17 @@
+{
+  "name": "Comanda Eventos - POS",
+  "short_name": "ComandaPOS",
+  "start_url": ".",
+  "display": "fullscreen",
+  "background_color": "#f8fafc",
+  "theme_color": "#dc2626",
+  "description": "Sistema de Punto de Venta para Eventos",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1041/1041883.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

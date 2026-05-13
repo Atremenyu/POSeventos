@@ -177,7 +177,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const [newModifierPrice, setNewModifierPrice] = useState(0);
   const [newModifierRecipe, setNewModifierRecipe] = useState<RecipeItem[]>([]);
   const [activeGroupIndex, setActiveGroupIndex] = useState<number | null>(null);
-  const [activeTabState, setActiveTabState] = useState(activeTab);
 
   // Reset state when tab changes
   useEffect(() => {
@@ -706,8 +705,24 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
           </div>
 
           {(isAdding || editingId) && (
-            <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
-              <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Item</h3>
+            <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200 flex flex-col">
+              <div className="flex justify-between items-center mb-6 border-b pb-4 sticky top-0 bg-white z-10">
+                <h3 className="font-black text-black uppercase tracking-widest">{editingId ? 'Editar' : 'Agregar'} Item</h3>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => { setIsAdding(false); setEditingId(null); resetProductForm(); }}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveProduct}
+                    className="px-6 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Item</label>
@@ -958,20 +973,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="mt-8 flex justify-end space-x-3">
-                <button 
-                  onClick={() => { setIsAdding(false); setEditingId(null); resetProductForm(); }}
-                  className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveProduct}
-                  className="px-10 py-2 bg-black text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg"
-                >
-                  Guardar
-                </button>
-              </div>
             </div>
           )}
 
@@ -1040,7 +1041,23 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
           {(isAdding || editingId) && (
             <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
-              <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Insumo</h3>
+              <div className="flex justify-between items-center mb-6 border-b pb-4">
+                <h3 className="font-black text-black uppercase tracking-widest">{editingId ? 'Editar' : 'Agregar'} Insumo</h3>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => { setIsAdding(false); setEditingId(null); }}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveIngredient}
+                    className="px-6 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
                 <div className="space-y-1 sm:col-span-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Insumo</label>
@@ -1075,20 +1092,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-red-600 outline-none"
                   />
                 </div>
-              </div>
-              <div className="mt-8 flex justify-end space-x-3 text-xs">
-                <button 
-                  onClick={() => { setIsAdding(false); setEditingId(null); }}
-                  className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-black uppercase tracking-widest hover:bg-slate-200 transition"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveIngredient}
-                  className="px-10 py-2 bg-black text-white rounded-xl font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg"
-                >
-                  Guardar
-                </button>
               </div>
             </div>
           )}
@@ -1244,7 +1247,23 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
           {(isAdding || editingId) && (
             <div className="bg-white p-6 rounded-3xl border-2 border-red-600 shadow-xl animate-in zoom-in duration-200">
-              <h3 className="font-black text-black uppercase tracking-widest mb-6 border-b pb-2">{editingId ? 'Editar' : 'Agregar'} Usuario</h3>
+              <div className="flex justify-between items-center mb-6 border-b pb-4">
+                <h3 className="font-black text-black uppercase tracking-widest">{editingId ? 'Editar' : 'Agregar'} Usuario</h3>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => { setIsAdding(false); setEditingId(null); resetUserForm(); }}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveUser}
+                    className="px-6 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 shadow-lg"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre Completo</label>
@@ -1273,20 +1292,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="mt-8 flex justify-end space-x-3">
-                <button 
-                  onClick={() => { setIsAdding(false); setEditingId(null); resetUserForm(); }}
-                  className="px-6 py-2 bg-slate-100 text-slate-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveUser}
-                  className="px-10 py-2 bg-black text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg"
-                >
-                  Guardar Usuario
-                </button>
               </div>
             </div>
           )}
@@ -1410,7 +1415,23 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
           {(isAdding || editingId) && (
             <div className="bg-white p-8 rounded-3xl border-2 border-black shadow-2xl space-y-6 animate-in zoom-in duration-200">
-              <h3 className="text-lg font-black uppercase tracking-widest">{editingId ? 'Editar' : 'Crear'} Rol</h3>
+              <div className="flex justify-between items-center border-b pb-6">
+                <h3 className="text-lg font-black uppercase tracking-widest">{editingId ? 'Editar' : 'Crear'} Rol</h3>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => { setIsAdding(false); setEditingId(null); }}
+                    className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSaveRole}
+                    className="px-6 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 shadow-xl transition-all"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
               
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Rol</label>
@@ -1448,20 +1469,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-6 border-t">
-                <button 
-                  onClick={() => { setIsAdding(false); setEditingId(null); }}
-                  className="px-6 py-3 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveRole}
-                  className="px-10 py-3 bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 shadow-xl transition-all"
-                >
-                  Guardar Permisos
-                </button>
-              </div>
             </div>
           )}
 
@@ -1511,7 +1518,15 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
       {activeTab === 'general' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-400 pb-10">
           <div className="space-y-6">
-            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Ajustes del Negocio</h2>
+            <div className="flex justify-between items-center sticky top-0 bg-slate-50 z-20 py-4 -mt-4 mb-2">
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Ajustes del Negocio</h2>
+              <button 
+                onClick={handleSaveGeneral}
+                className="bg-black text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition shadow-xl"
+              >
+                Guardar Cambios
+              </button>
+            </div>
             
             {/* Perfil del Negocio */}
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -1622,15 +1637,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                   />
                 </div>
               </div>
-            </div>
-            
-            <div className="pt-2 flex justify-end">
-              <button 
-                onClick={handleSaveGeneral}
-                className="bg-black text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-slate-800 transition shadow-2xl"
-              >
-                Guardar Configuración
-              </button>
             </div>
           </div>
 

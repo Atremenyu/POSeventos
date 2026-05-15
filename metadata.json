@@ -1,5 +1,5 @@
 {
-  "name": "Remix: Comanda Eventos - POS System",
+  "name": "Comanda Restaurante - POS System",
   "description": "A comprehensive Point of Sale system for food events, featuring order management, kitchen display (KDS), product CRUD, and sales history with PDF export.",
   "requestFramePermissions": [],
   "majorCapabilities": []

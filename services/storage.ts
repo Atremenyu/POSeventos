@@ -25,7 +25,7 @@ export const storage = {
     // Fallback for backwards compatibility
     return {
       name: localStorage.getItem(KEYS.RESTAURANT_NAME) || 'Mi Restaurante',
-      eventType: localStorage.getItem(KEYS.EVENT_TYPE) || 'Evento Gastronómico',
+      eventType: localStorage.getItem(KEYS.EVENT_TYPE) || 'Restaurante',
       currency: 'MXN',
       taxRate: 0,
     };
@@ -99,7 +99,7 @@ export const storage = {
     localStorage.setItem(KEYS.RESTAURANT_NAME, name);
   },
   getEventType: (): string => {
-    return localStorage.getItem(KEYS.EVENT_TYPE) || 'Evento Gastronómico';
+    return localStorage.getItem(KEYS.EVENT_TYPE) || 'Restaurante';
   },
   saveEventType: (type: string) => {
     localStorage.setItem(KEYS.EVENT_TYPE, type);

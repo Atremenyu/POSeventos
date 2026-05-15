@@ -33,13 +33,13 @@ const App: React.FC = () => {
   
   const [settings, setSettings] = useState<StoreSettings>({
     name: 'Mi Restaurante',
-    eventType: 'Evento Gastronómico',
+    eventType: 'Restaurante',
     currency: 'MXN',
     taxRate: 0,
   });
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [activeNotification, setActiveNotification] = useState<{ id: string, message: string, type: 'ready' } | null>(null);
+  const [activeNotification, setActiveNotification] = useState<{ id: string, message: string, type: 'ready' | 'warning' } | null>(null);
   const [showOrdersSlider, setShowOrdersSlider] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showOpeningModal, setShowOpeningModal] = useState(false);
@@ -339,6 +339,54 @@ const App: React.FC = () => {
     return cashShifts.find(s => s.status === 'open');
   }, [cashShifts]);
 
+  const checkStockAndNotify = (product: Product, selectedModifiers: SelectedModifier[] | undefined, quantity: number = 1) => {
+    const required: Record<string, number> = {};
+    
+    // Base recipe
+    product.recipe?.forEach(ri => {
+      required[ri.ingredientId] = (required[ri.ingredientId] || 0) + (ri.quantity * quantity);
+    });
+
+    // Modifiers recipe
+    selectedModifiers?.forEach(sm => {
+      const modifier = product.modifierGroups?.flatMap(g => g.modifiers).find(m => m.id === sm.modifierId);
+      modifier?.recipe?.forEach(ri => {
+        required[ri.ingredientId] = (required[ri.ingredientId] || 0) + (ri.quantity * quantity);
+      });
+    });
+
+    // Check availability
+    const lowIngredients: string[] = [];
+    const outOfStock: string[] = [];
+
+    Object.entries(required).forEach(([ingId, qty]) => {
+      const ing = ingredients.find(i => i.id === ingId);
+      if (ing) {
+        if (ing.stock < qty) {
+          outOfStock.push(ing.name);
+        } else if (ing.stock - qty <= ing.minStock) {
+          lowIngredients.push(ing.name);
+        }
+      }
+    });
+
+    if (outOfStock.length > 0) {
+      setActiveNotification({
+        id: Date.now().toString(),
+        message: `SIN STOCK: ${outOfStock.join(', ')}`,
+        type: 'warning'
+      });
+      return false;
+    } else if (lowIngredients.length > 0) {
+      setActiveNotification({
+        id: Date.now().toString(),
+        message: `STOCK BAJO: ${lowIngredients.join(', ')}`,
+        type: 'warning'
+      });
+    }
+    return true;
+  };
+
   const addToCart = (product: Product, selectedModifiers?: SelectedModifier[], note?: string, isCombo?: boolean, selectedComboOptions?: ComboOption[]) => {
     if (!hasOpenCashShift && (currentUser?.role === 'Admin' || currentUser?.role === 'Caja')) {
       alert('Debes abrir la caja antes de tomar pedidos.');
@@ -347,9 +395,8 @@ const App: React.FC = () => {
       return;
     }
     
-    // Check stock if needed (Advanced: could warn if stock is low)
-    // For now, we just discount on order creation
-    
+    checkStockAndNotify(product, selectedModifiers, 1);
+
     setCart(prev => {
       const modifierKey = selectedModifiers ? JSON.stringify(selectedModifiers) : '';
       const comboKey = JSON.stringify(selectedComboOptions || []);
@@ -394,6 +441,9 @@ const App: React.FC = () => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQty = Math.max(0, item.quantity + delta);
+        if (delta > 0) {
+            checkStockAndNotify(item, item.selectedModifiers, 1);
+        }
         return { ...item, quantity: newQty };
       }
       return item;
@@ -738,7 +788,13 @@ const App: React.FC = () => {
             </span>
             <div className="leading-tight">
               <h1 className="text-lg font-black tracking-tighter uppercase whitespace-nowrap">{settings.name}</h1>
-              <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest">{settings.eventType}</p>
+              <div className="flex items-center space-x-2">
+                <p className="text-[10px] text-red-500 font-black uppercase tracking-widest">
+                  {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+                <span className="w-1 h-1 bg-red-600/30 rounded-full"></span>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{settings.eventType}</p>
+              </div>
             </div>
           </div>
           
@@ -875,29 +931,35 @@ const App: React.FC = () => {
       />
 
       {/* Global Notification */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {activeNotification && (
           <motion.div 
-            initial={{ x: 300, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 300, opacity: 0 }}
-            className="fixed top-4 right-4 z-[180] w-full max-w-sm"
+            key={activeNotification.id}
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-md px-4"
           >
-             <div className="bg-black text-white p-4 rounded-2xl shadow-2xl border-l-4 border-green-500 flex items-center space-x-4">
-                <div className="bg-green-600 p-2 rounded-lg text-white">
-                   <Icons.Check />
+             <div className={`
+               backdrop-blur-md p-4 rounded-2xl shadow-2xl flex items-center space-x-4 border
+               ${activeNotification.type === 'ready' 
+                 ? 'bg-black text-white border-green-500/50' 
+                 : 'bg-red-600 text-white border-white/20'}
+             `}>
+                <div className={`p-2 rounded-lg ${activeNotification.type === 'ready' ? 'bg-green-600' : 'bg-white text-red-600'}`}>
+                   {activeNotification.type === 'ready' ? <Icons.Check /> : <Icons.Activity />}
                 </div>
                 <div className="flex-grow">
-                   <p className="text-[9px] font-black uppercase tracking-widest text-green-500">Pedido Listo</p>
-                   <p className="text-xs font-bold uppercase tracking-tight leading-tight">{activeNotification.message}</p>
+                   <p className={`text-[9px] font-black uppercase tracking-widest ${activeNotification.type === 'ready' ? 'text-green-500' : 'text-red-100'}`}>
+                     {activeNotification.type === 'ready' ? 'Pedido Listo' : 'Aviso de Inventario'}
+                   </p>
+                   <p className="text-xs font-black uppercase tracking-tight leading-tight">{activeNotification.message}</p>
                 </div>
                 <button 
                   onClick={() => setActiveNotification(null)}
-                  className="text-slate-500 hover:text-white transition p-1"
+                  className="text-white/50 hover:text-white transition p-1"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
+                  <Icons.X size={16} />
                 </button>
              </div>
           </motion.div>

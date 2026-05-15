@@ -627,7 +627,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
 
         // Validaciones básicas de estructura
         if (!data.products || !data.categories) {
-          throw new Error("El archivo no es un respaldo válido de Comanda Eventos.");
+          throw new Error("El archivo no es un respaldo válido de Comanda Restaurante.");
         }
 
         setPreview({
@@ -812,19 +812,28 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                     {recipe.map(item => {
                       const ing = ingredients.find(i => i.id === item.ingredientId);
                       return (
-                        <div key={item.ingredientId} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
-                          <div>
-                            <p className="text-[10px] font-black text-slate-900 uppercase">{ing?.name || 'Desconocido'}</p>
-                            <p className="text-[9px] font-black text-slate-400 uppercase">{item.quantity} gramos</p>
+                        <div key={item.ingredientId} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm transition hover:border-red-200">
+                          <div className="flex-grow">
+                            <p className="text-[10px] font-black text-slate-900 uppercase truncate">{ing?.name || 'Desconocido'}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <input 
+                                type="number" 
+                                className="w-16 p-1 rounded-lg bg-slate-50 border border-slate-200 text-[10px] font-black focus:ring-1 focus:ring-red-600 outline-none" 
+                                value={item.quantity} 
+                                onChange={(e) => setRecipe(prev => prev.map(r => r.ingredientId === item.ingredientId ? { ...r, quantity: Number(e.target.value) } : r))}
+                              />
+                              <span className="text-[10px] font-black text-slate-400 uppercase">gramos</span>
+                            </div>
                           </div>
-                          <button onClick={() => removeIngredientFromRecipe(item.ingredientId)} className="text-slate-300 hover:text-red-600 transition">
+                          <button onClick={() => removeIngredientFromRecipe(item.ingredientId)} className="ml-3 p-1 text-slate-300 hover:text-red-600 transition">
                             <Icons.Trash size={14} />
                           </button>
                         </div>
                       );
                     })}
                     {recipe.length === 0 && (
-                      <div className="col-span-full py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl opacity-50">
+                      <div className="col-span-full py-8 text-center border-2 border-dashed border-slate-100 rounded-2xl opacity-50">
+                        <Icons.Activity size={24} className="mx-auto mb-2 text-slate-300" />
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sin ingredientes asociados</p>
                       </div>
                     )}
@@ -989,7 +998,31 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
               <tbody className="divide-y divide-slate-100 font-medium">
                 {products.map(product => (
                   <tr key={product.id} className="hover:bg-red-50/30 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-900">{product.name}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900">{product.name}</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {product.hasCombo && (
+                            <span className="text-[7px] font-black bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md uppercase tracking-tighter flex items-center">
+                              <span className="w-1 h-1 bg-blue-600 rounded-full mr-1"></span>
+                              Combo
+                            </span>
+                          )}
+                          {product.modifierGroups && product.modifierGroups.length > 0 && (
+                            <span className="text-[7px] font-black bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded-md uppercase tracking-tighter flex items-center">
+                              <span className="w-1 h-1 bg-purple-600 rounded-full mr-1"></span>
+                              Opciones
+                            </span>
+                          )}
+                          {product.recipe && product.recipe.length > 0 && (
+                            <span className="text-[7px] font-black bg-orange-50 text-orange-600 border border-orange-100 px-1.5 py-0.5 rounded-md uppercase tracking-tighter flex items-center">
+                              <span className="w-1 h-1 bg-orange-600 rounded-full mr-1"></span>
+                              Receta
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <span className="text-[9px] font-black px-2 py-0.5 rounded border border-slate-300 uppercase bg-white text-slate-600">
                         {product.category}
@@ -1545,15 +1578,25 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Evento / Rubro</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Giro / Rubro Comercial</label>
                   <div className="relative">
                     <div className="absolute left-3 top-3 text-slate-400"><Icons.MapPin size={18}/></div>
                     <input 
                       type="text" 
+                      placeholder="Ej. Restaurante, Cafetería, Bar..."
                       className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-black outline-none font-bold text-slate-800 text-sm"
                       value={formSettings.eventType}
                       onChange={e => setFormSettings({...formSettings, eventType: e.target.value})}
                     />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha de Operación (Hoy)</label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-3 text-red-600"><Icons.Calendar size={18}/></div>
+                    <div className="w-full pl-10 pr-4 py-3 rounded-xl bg-red-50 border-0 ring-1 ring-red-100 font-black text-red-600 text-sm uppercase">
+                      {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">

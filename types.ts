@@ -6,7 +6,7 @@ export interface Ingredient {
   name: string;
   stock: number;
   minStock: number;
-  unit: 'g';
+  unit: 'g' | 'ml' | 'unit';
 }
 
 export interface RecipeItem {

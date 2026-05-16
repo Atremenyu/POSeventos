@@ -4,7 +4,12 @@ import { Order } from '../types';
 export const generateTicketPDF = (order: Order, restaurantName: string = 'MI RESTAURANTE') => {
   // Calculate height needed: base + items + notes
   const noteLinesCount = order.items.filter(i => i.note).length;
-  const dynamicHeight = 150 + (order.items.length * 7) + (noteLinesCount * 4);
+  let dynamicHeight = 150 + (order.items.length * 7) + (noteLinesCount * 4);
+  
+  const isDeliveryApp = order.takeawayType === 'uber' || order.takeawayType === 'didi';
+  if (isDeliveryApp) {
+    dynamicHeight += 30; // Extra room for large text
+  }
 
   // Create 80mm wide PDF
   const doc = new jsPDF({
@@ -89,6 +94,23 @@ export const generateTicketPDF = (order: Order, restaurantName: string = 'MI RES
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('¡GRACIAS POR SU COMPRA!', centerX, y, { align: 'center' });
+
+  if (isDeliveryApp) {
+    y += 15;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(5, y - 8, 75, y - 8);
+    
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text(order.takeawayType!.toUpperCase(), centerX, y, { align: 'center' });
+    
+    y += 10;
+    doc.setFontSize(14);
+    doc.text(order.client.toUpperCase(), centerX, y, { align: 'center' });
+    
+    doc.line(5, y + 4, 75, y + 4);
+  }
 
   doc.save(`ticket_${order.id.slice(-8)}.pdf`);
 };

@@ -15,6 +15,7 @@ interface ProductManagementProps {
   settings: StoreSettings;
   onUpdateSettings: (settings: StoreSettings) => void;
   onRestoreDatabase: (data: any) => void;
+  onFactoryReset: () => void;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   shifts: Shift[];
@@ -50,6 +51,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   settings,
   onUpdateSettings,
   onRestoreDatabase,
+  onFactoryReset,
   users,
   setUsers,
   shifts,
@@ -148,6 +150,10 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const triggerConfirm = (title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' = 'danger') => {
     setConfirmState({ isOpen: true, title, message, onConfirm, type });
   };
+
+  const [resetStep, setResetStep] = useState(0);
+  const [resetPin, setResetPin] = useState('');
+  const [resetError, setResetError] = useState('');
 
   // General Settings Form
   const [formSettings, setFormSettings] = useState<StoreSettings>(settings);
@@ -591,6 +597,20 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
   const handleSaveGeneral = () => {
     onUpdateSettings(formSettings);
     alert('Configuración actualizada');
+  };
+
+  const handleFactoryReset = () => {
+    const adminUser = users.find(u => u.role === 'Admin');
+    if (!adminUser) {
+      setResetError('No se encontró un administrador.');
+      return;
+    }
+    if (resetPin !== adminUser.pin) {
+      setResetError('PIN Incorrecto.');
+      return;
+    }
+    // Call the centralized reset logic from App.tsx
+    onFactoryReset();
   };
 
   // BACKUP LOGIC
@@ -1770,6 +1790,80 @@ const ProductManagement: React.FC<ProductManagementProps> = ({
                   <p className="text-[10px] text-red-700 leading-relaxed font-medium">
                     Use estas funciones para guardar su progreso. El sistema almacena datos localmente, por lo que limpiar la caché del navegador borrará su información si no tiene un respaldo.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Zona de Peligro - Factory Reset */}
+            <div className="bg-red-50 p-8 rounded-3xl border-2 border-dashed border-red-200 mt-6">
+              <div className="flex items-center space-x-3 text-red-600 mb-6">
+                <Icons.Activity size={24} />
+                <h3 className="text-sm font-black uppercase tracking-widest">Zona de Peligro</h3>
+              </div>
+              
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-slate-900 uppercase">Reiniciar Aplicación (Modo Fábrica)</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight max-w-sm">Borra absolutamente todo. Tras el reinicio, el sistema te pedirá configurar un nuevo Administrador Maestro.</p>
+                </div>
+                
+                <div className="shrink-0">
+                  {resetStep === 0 ? (
+                    <button 
+                      onClick={() => setResetStep(1)}
+                      className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition shadow-lg"
+                    >
+                      Limpiar Todo
+                    </button>
+                  ) : resetStep === 1 ? (
+                    <div className="flex flex-col items-end space-y-2">
+                      <p className="text-[10px] font-black text-red-600 uppercase animate-pulse">¿Confirmas que deseas BORRAR TODO?</p>
+                      <div className="flex space-x-2">
+                        <button 
+                          onClick={() => setResetStep(0)}
+                          className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg font-black text-[10px] uppercase"
+                        >
+                          No
+                        </button>
+                        <button 
+                          onClick={() => setResetStep(2)}
+                          className="px-3 py-1.5 bg-red-600 text-white rounded-lg font-black text-[10px] uppercase hover:bg-red-700"
+                        >
+                          Sí, Estoy Seguro
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-end space-y-2">
+                      <p className="text-[10px] font-black text-slate-900 uppercase">PIN de Administrador</p>
+                      <div className="flex space-x-2">
+                        <input 
+                          type="password" 
+                          maxLength={4}
+                          placeholder="••••"
+                          className="w-20 px-2 py-1.5 rounded-lg bg-white border-2 border-red-200 focus:border-red-600 outline-none font-black text-center tracking-[0.3em]"
+                          value={resetPin}
+                          onChange={(e) => {
+                            setResetPin(e.target.value);
+                            setResetError('');
+                          }}
+                        />
+                        <button 
+                          onClick={() => setResetStep(0)}
+                          className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg font-black text-[10px] uppercase"
+                        >
+                          X
+                        </button>
+                        <button 
+                          onClick={handleFactoryReset}
+                          className="px-4 py-1.5 bg-red-600 text-white rounded-lg font-black text-[10px] uppercase hover:bg-red-800 shadow-lg"
+                        >
+                          BORRAR
+                        </button>
+                      </div>
+                      {resetError && <p className="text-[9px] font-black text-red-600 uppercase">{resetError}</p>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

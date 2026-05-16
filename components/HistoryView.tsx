@@ -31,6 +31,31 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   const [dateRange, setDateRange] = useState({ start: today, end: today });
   const [isFilterActive, setIsFilterActive] = useState(false);
 
+  const todaySummary = useMemo(() => {
+    const todayOrders = orders.filter(o => 
+      new Date(o.date).toISOString().split('T')[0] === today && 
+      o.status !== 'cancelled' && 
+      o.isPaid
+    );
+    
+    let total = 0;
+    const methods: Record<string, number> = {};
+    
+    todayOrders.forEach(o => {
+      if (o.payments && o.payments.length > 0) {
+        o.payments.forEach(p => {
+          total += p.amount;
+          methods[p.method] = (methods[p.method] || 0) + p.amount;
+        });
+      } else {
+        total += o.total;
+        methods[o.payment] = (methods[o.payment] || 0) + o.total;
+      }
+    });
+
+    return { total, methods };
+  }, [orders, today]);
+
   const filteredOrders = useMemo(() => {
     if (!isFilterActive) return orders;
     
@@ -329,6 +354,45 @@ const HistoryView: React.FC<HistoryViewProps> = ({
             >
               Dashboard
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Resumen del Día Actual */}
+      <div className="bg-black text-white p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group border-b-8 border-red-600">
+        <div className="absolute top-0 right-0 p-12 opacity-10 blur-sm group-hover:rotate-12 transition-transform duration-700">
+          <Icons.DollarSign size={160} />
+        </div>
+        <div className="relative z-10">
+          <div className="flex items-center space-x-3 mb-6">
+             <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></div>
+             <h3 className="text-xs font-black uppercase tracking-[0.4em]">Corte Parcial del Día ({new Date().toLocaleDateString()})</h3>
+          </div>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+            <div className="space-y-1">
+              <p className="text-6xl sm:text-7xl font-black tracking-tighter leading-none italic">
+                ${todaySummary.total.toLocaleString()}
+              </p>
+              <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em]">Total Facturado Hoy</p>
+            </div>
+            
+            <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+              {Object.entries(todaySummary.methods).length > 0 ? (
+                Object.entries(todaySummary.methods).map(([method, amount]) => (
+                  <div key={method} className="flex-1 min-w-[140px] bg-slate-900/50 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/5 hover:border-red-600/30 transition-colors shadow-inner">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center">
+                       <span className="w-1.5 h-1.5 bg-red-600 rounded-full mr-2"></span>
+                       {method}
+                    </p>
+                    <p className="text-xl font-black tracking-tight leading-none">${amount.toLocaleString()}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest italic border-2 border-dashed border-slate-900 p-6 rounded-3xl">
+                  Sin ventas registradas hoy
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

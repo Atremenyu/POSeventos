@@ -8,10 +8,10 @@ import POSView from './components/POSView';
 import DispatchView from './components/DispatchView';
 import HistoryView from './components/HistoryView';
 import TablesView from './components/TablesView';
-import ProductManagement from './components/ProductManagement';
 import TabNavigation from './components/TabNavigation';
 import ActiveOrdersSlider from './components/ActiveOrdersSlider';
 import { LoginView } from './components/LoginView';
+import { SetupWizard } from './components/SetupWizard';
 import CashOpeningModal from './components/CashOpeningModal';
 import CashClosingModal from './components/CashClosingModal';
 import AdminCRM from './components/AdminCRM';
@@ -24,7 +24,7 @@ const App: React.FC = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [cashShifts, setCashShifts] = useState<CashShift[]>([]);
   const [roles, setRoles] = useState<UserRole[]>(ROLES);
@@ -83,7 +83,7 @@ const App: React.FC = () => {
       tip: o.tip || 0
     }));
     setOrders(migratedOrders);
-    setUsers(savedUsers.length > 0 ? savedUsers : INITIAL_USERS);
+    setUsers(savedUsers);
     setShifts(savedShifts);
     setCashShifts(savedCashShifts);
     setRoles(savedRoles.length > 0 ? savedRoles : ROLES);
@@ -763,6 +763,37 @@ const App: React.FC = () => {
     storage.saveSettings(newSettings);
   };
 
+  const handleFactoryReset = () => {
+    // 1. Clear everything from localStorage
+    localStorage.clear();
+    
+    // 2. Clear all React states to prevent them from re-saving via hooks
+    setProducts([]);
+    setCategories([]);
+    setTables([]);
+    setOrders([]);
+    setUsers([]);
+    setIngredients([]);
+    setShifts([]);
+    setCashShifts([]);
+    setSettings({
+      name: 'Mi Restaurante',
+      eventType: 'Restaurante',
+      currency: 'MXN',
+      taxRate: 0,
+    });
+    
+    // 3. Immediately reload the page
+    window.location.reload();
+  };
+
+  const handleSetupComplete = (adminUser: User) => {
+    setUsers([adminUser]);
+    setCurrentUser(adminUser);
+    setView('central');
+    setAdminView('overview');
+  };
+
   if (!isLoaded) {
     return (
       <div className="h-screen flex items-center justify-center bg-black text-white">
@@ -772,6 +803,10 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (users.length === 0) {
+    return <SetupWizard onComplete={handleSetupComplete} />;
   }
 
   if (!currentUser) {
@@ -878,6 +913,7 @@ const App: React.FC = () => {
               onUpdateRoles={setRoles}
               onUpdateSettings={handleUpdateSettings}
               onRestoreDatabase={restoreDatabase}
+              onFactoryReset={handleFactoryReset}
               onCloseCashShift={() => setShowClosingModal(true)}
               ingredients={ingredients}
               setIngredients={setIngredients}

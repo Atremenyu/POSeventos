@@ -26,6 +26,7 @@ interface AdminCRMProps {
   onUpdateRoles: (roles: UserRole[]) => void;
   onUpdateSettings: (settings: StoreSettings) => void;
   onRestoreDatabase: (data: any) => void;
+  onFactoryReset: () => void;
   onCloseCashShift: () => void;
   ingredients: Ingredient[];
   setIngredients: React.Dispatch<React.SetStateAction<Ingredient[]>>;
@@ -51,6 +52,7 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
   onUpdateRoles,
   onUpdateSettings,
   onRestoreDatabase,
+  onFactoryReset,
   onCloseCashShift,
   ingredients,
   setIngredients
@@ -201,6 +203,7 @@ const AdminCRM: React.FC<AdminCRMProps> = ({
               settings={settings}
               onUpdateSettings={onUpdateSettings}
               onRestoreDatabase={onRestoreDatabase}
+              onFactoryReset={onFactoryReset}
               users={users}
               setUsers={onUpdateUsers as any}
               shifts={shifts}
